@@ -22,8 +22,6 @@ func PrettyFormatter(buf *TrackedBuffer, node SQLNode) {
 		prettyFormatOrderByClause(buf, node)
 	case *Limit:
 		prettyFormatLimitClause(buf, node)
-	case *AliasedTableExpr:
-		prettyFormatAliasedTableExpr(buf, node)
 	case *Subquery:
 		prettyFormatSubquery(buf, node)
 	default:
@@ -70,33 +68,33 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 	}
 
 	if len(node.From) > 0 {
-		buf.WriteString("\nfrom ")
-		for i, table := range node.From {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			buf.Myprintf("%v", table)
-		}
+		ensureClauseNewline(buf)
+		buf.Myprintf("from %v", node.From)
 	}
 
 	if node.Where != nil && node.Where.Expr != nil {
-		prettyFormatWhereClause(buf, node.Where)
+		ensureClauseNewline(buf)
+		buf.Myprintf("%v", node.Where)
 	}
 
 	if len(node.GroupBy) > 0 {
-		prettyFormatGroupByClause(buf, node.GroupBy)
+		ensureClauseNewline(buf)
+		buf.Myprintf("%v", node.GroupBy)
 	}
 
 	if node.Having != nil && node.Having.Expr != nil {
-		prettyFormatWhereClause(buf, node.Having)
+		ensureClauseNewline(buf)
+		buf.Myprintf("%v", node.Having)
 	}
 
 	if len(node.OrderBy) > 0 {
-		prettyFormatOrderByClause(buf, node.OrderBy)
+		ensureClauseNewline(buf)
+		buf.Myprintf("%v", node.OrderBy)
 	}
 
 	if node.Limit != nil {
-		prettyFormatLimitClause(buf, node.Limit)
+		ensureClauseNewline(buf)
+		buf.Myprintf("%v", node.Limit)
 	}
 
 	if node.Lock != "" {
@@ -234,31 +232,20 @@ func ensureClauseNewline(buf *TrackedBuffer) {
 	buf.WriteByte('\n')
 }
 
-func prettyFormatAliasedTableExpr(buf *TrackedBuffer, node *AliasedTableExpr) {
-	if node == nil {
-		return
-	}
-	buf.Myprintf("%v%v", node.Expr, node.Partitions)
-	if !node.As.IsEmpty() {
-		buf.Myprintf(" as %v", node.As)
-	}
-	if node.Hints != nil {
-		buf.Myprintf("%v", node.Hints)
-	}
-}
-
 func prettyFormatSubquery(buf *TrackedBuffer, node *Subquery) {
 	if node == nil || node.Select == nil {
 		buf.WriteString("()")
 		return
 	}
-	inner := String(node.Select, true)
-	if inner == "" {
+	inner := NewTrackedBuffer(buf.nodeFormatter)
+	inner.Myprintf("%v", node.Select)
+	innerSQL := inner.String()
+	if innerSQL == "" {
 		buf.WriteString("()")
 		return
 	}
 	buf.WriteString("(\n")
-	buf.WriteString(indentLines(inner, "\t"))
+	buf.WriteString(indentLines(innerSQL, "\t"))
 	buf.WriteString("\n)")
 }
 

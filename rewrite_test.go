@@ -121,7 +121,7 @@ func TestRewritePointSql(t *testing.T) {
 FROM
   dm_temai.shop_fusion_group_aggregation_feature_by_vet
 WHERE
-  date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet')`, true)
+  date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 =2 and 3=3)`, true)
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
