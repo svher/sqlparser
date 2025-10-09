@@ -155,6 +155,19 @@ func TestPrettyFormatterWhereAlignment(t *testing.T) {
 	}
 }
 
+func TestPrettyFormatterWhereMixedBooleanAlignment(t *testing.T) {
+	query := "select * from t where `date` = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 = 2 and 3 = 3)"
+	stmt, err := Parse(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const want = "select *\nfrom t\nwhere `date` = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet')\nand   1 = 1\nor    (2 = 2 and 3 = 3)"
+	if got := String(stmt, true); got != want {
+		t.Errorf("pretty select with mixed boolean expressions:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestRemoveHints(t *testing.T) {
 	for _, query := range []string{
 		"select * from t use index (i)",
