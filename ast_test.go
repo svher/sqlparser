@@ -110,6 +110,23 @@ func TestSelect(t *testing.T) {
 	}
 }
 
+func TestPrettyFormatterClauses(t *testing.T) {
+	stmt, err := Parse("update foo set bar = 1 where baz = 2 order by bar desc limit 5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := String(stmt, true), "update foo set bar = 1\nwhere baz = 2\norder by bar desc\nlimit 5"; got != want {
+		t.Errorf("pretty string:\n%s\nwant:\n%s", got, want)
+	}
+
+	buf := NewTrackedBuffer(PrettyFormatter)
+	buf.SetPretty(true)
+	buf.Myprintf("%v", stmt)
+	if got, want := buf.String(), "update foo set bar = 1\nwhere baz = 2\norder by bar desc\nlimit 5"; got != want {
+		t.Errorf("pretty tracked buffer:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestRemoveHints(t *testing.T) {
 	for _, query := range []string{
 		"select * from t use index (i)",

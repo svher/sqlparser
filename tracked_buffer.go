@@ -25,6 +25,32 @@ import (
 // function that can be given to TrackedBuffer for code generation.
 type NodeFormatter func(buf *TrackedBuffer, node SQLNode, pretty bool)
 
+// PrettyFormatter is a NodeFormatter implementation that produces a
+// human-friendly, multi-line rendering of SQL nodes when the TrackedBuffer is
+// configured for pretty output. It falls back to the default formatting for
+// nodes that don't require special handling.
+func PrettyFormatter(buf *TrackedBuffer, node SQLNode, pretty bool) {
+	if !pretty {
+		node.Format(buf, pretty)
+		return
+	}
+
+	switch node := node.(type) {
+	case *Select:
+		node.formatPretty(buf)
+	case *Where:
+		prettyFormatWhere(buf, node)
+	case GroupBy:
+		prettyFormatGroupBy(buf, node)
+	case OrderBy:
+		prettyFormatOrderBy(buf, node)
+	case *Limit:
+		prettyFormatLimit(buf, node)
+	default:
+		node.Format(buf, pretty)
+	}
+}
+
 // TrackedBuffer is used to rebuild a query from the ast.
 // bindLocations keeps track of locations in the buffer that
 // use bind variables for efficient future substitutions.
@@ -120,6 +146,50 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 		fieldnum++
 		i++
 	}
+}
+
+func prettyFormatWhere(buf *TrackedBuffer, node *Where) {
+	if node == nil || node.Expr == nil {
+		return
+	}
+	buf.Myprintf("\n%s %v", node.Type, node.Expr)
+}
+
+func prettyFormatGroupBy(buf *TrackedBuffer, node GroupBy) {
+	if len(node) == 0 {
+		return
+	}
+	buf.WriteString("\ngroup by ")
+	for i, expr := range node {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.Myprintf("%v", expr)
+	}
+}
+
+func prettyFormatOrderBy(buf *TrackedBuffer, node OrderBy) {
+	if len(node) == 0 {
+		return
+	}
+	buf.WriteString("\norder by ")
+	for i, expr := range node {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.Myprintf("%v", expr)
+	}
+}
+
+func prettyFormatLimit(buf *TrackedBuffer, node *Limit) {
+	if node == nil {
+		return
+	}
+	buf.WriteString("\nlimit ")
+	if node.Offset != nil {
+		buf.Myprintf("%v, ", node.Offset)
+	}
+	buf.Myprintf("%v", node.Rowcount)
 }
 
 // WriteArg writes a value argument into the buffer along with

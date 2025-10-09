@@ -190,7 +190,12 @@ func String(node SQLNode, pretty bool) string {
 		return "<nil>"
 	}
 
-	buf := NewTrackedBuffer(nil)
+	var buf *TrackedBuffer
+	if pretty {
+		buf = NewTrackedBuffer(PrettyFormatter)
+	} else {
+		buf = NewTrackedBuffer(nil)
+	}
 	buf.SetPretty(pretty)
 	buf.Myprintf("%v", node)
 	return buf.String()
