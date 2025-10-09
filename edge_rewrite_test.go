@@ -7,28 +7,6 @@ import (
 	"testing"
 )
 
-const shopAuthorOriginalSQL = `SELECT  point1_id,
-        point2_id,
-        point1_type,
-        point2_type,
-        value,
-        ts_us,
-        edge_type,
-        cast(order_rate_weight as float)
-FROM    (
-            SELECT  distinct src AS point1_id,
-                    tgt AS point2_id,
-                    'shop' AS point1_type,
-                    'author' AS point2_type,
-                    '' AS value,
-                    (UNIX_TIMESTAMP() * 1000000) AS ts_us,
-                    'shop_author' AS edge_type,
-                    ratio_src AS order_rate_weight
-            FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
-            WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
-            and edge_type = 'shop_sell_author_1d'
-        ) a`
-
 const authorShopOriginalSQL = `SELECT  DISTINCT point1_id,
         point2_id,
         point1_type,
@@ -38,17 +16,17 @@ const authorShopOriginalSQL = `SELECT  DISTINCT point1_id,
         edge_type,
         cast(order_rate_weight as float)
 FROM    (
-            SELECT  src AS point2_id,
-                    tgt AS point1_id,
-                    'shop' AS point2_type,
-                    'author' AS point1_type,
-                    '' AS value,
-                    (UNIX_TIMESTAMP() * 1000000) AS ts_us,
-                    'author_shop' AS edge_type,
-                    ratio_src AS order_rate_weight
-            FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
-            WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
-            and edge_type = 'shop_sell_author_1d'
+        SELECT  src AS point2_id,
+                tgt AS point1_id,
+                'shop' AS point2_type,
+                'author' AS point1_type,
+                '' AS value,
+                (UNIX_TIMESTAMP() * 1000000) AS ts_us,
+                'author_shop' AS edge_type,
+                ratio_src AS order_rate_weight
+        FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
+        WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
+        and edge_type = 'shop_sell_author_1d'
         ) a`
 
 const multiOriginalSQL = `SELECT  DISTINCT point1_id,
@@ -60,17 +38,17 @@ const multiOriginalSQL = `SELECT  DISTINCT point1_id,
         edge_type,
         cast(order_rate_weight as float)
 FROM    (
-            SELECT  src AS point1_id,
-                    tgt AS point2_id,
-                    'shop' AS point1_type,
-                    'sim' AS point2_type,
-                    '' AS value,
-                    (UNIX_TIMESTAMP() * 1000000) AS ts_us,
-                    'shop_sim' AS edge_type,
-                   ratio_src AS order_rate_weight
-            FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
-            WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
-            AND     edge_type = 'shop_sell_sim_1d'
+        SELECT  src AS point1_id,
+                tgt AS point2_id,
+                'shop' AS point1_type,
+                'sim' AS point2_type,
+                '' AS value,
+                (UNIX_TIMESTAMP() * 1000000) AS ts_us,
+                'shop_sim' AS edge_type,
+               ratio_src AS order_rate_weight
+        FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
+        WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
+        AND     edge_type = 'shop_sell_sim_1d'
         ) a;
 
 SELECT  DISTINCT point1_id,
@@ -82,17 +60,17 @@ SELECT  DISTINCT point1_id,
         edge_type,
         cast(order_rate_weight as float)
 FROM    (
-            SELECT  src AS point2_id,
-                    tgt AS point1_id,
-                    'shop' AS point2_type,
-                    'sim' AS point1_type,
-                    '' AS value,
-                    (UNIX_TIMESTAMP() * 1000000) AS ts_us,
-                    'sim_shop' AS edge_type,
-                    ratio_src AS order_rate_weight
-            FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
-            WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
-            AND     edge_type = 'shop_sell_sim_1d'
+        SELECT  src AS point2_id,
+                tgt AS point1_id,
+                'shop' AS point2_type,
+                'sim' AS point1_type,
+                '' AS value,
+                (UNIX_TIMESTAMP() * 1000000) AS ts_us,
+                'sim_shop' AS edge_type,
+                ratio_src AS order_rate_weight
+        FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
+        WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
+        AND     edge_type = 'shop_sell_sim_1d'
         ) a;
 
 SELECT  DISTINCT point1_id,
@@ -104,17 +82,17 @@ SELECT  DISTINCT point1_id,
         edge_type,
         cast(order_rate_weight as float)
 FROM    (
-            SELECT  src AS point1_id,
-                    tgt AS point2_id,
-                    'author' AS point1_type,
-                    'sim' AS point2_type,
-                    '' AS value,
-                    (UNIX_TIMESTAMP() * 1000000) AS ts_us,
-                    'author_sim' AS edge_type,
-                    ratio_src AS order_rate_weight
-            FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
-            WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
-            AND     edge_type = 'author_sell_sim_1d'
+        SELECT  src AS point1_id,
+                tgt AS point2_id,
+                'author' AS point1_type,
+                'sim' AS point2_type,
+                '' AS value,
+                (UNIX_TIMESTAMP() * 1000000) AS ts_us,
+                'author_sim' AS edge_type,
+                ratio_src AS order_rate_weight
+        FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
+        WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
+        AND     edge_type = 'author_sell_sim_1d'
         ) a;
 
 SELECT  DISTINCT point1_id,
@@ -126,23 +104,45 @@ SELECT  DISTINCT point1_id,
         edge_type,
         cast(order_rate_weight as float)
 FROM    (
-            SELECT  src AS point2_id,
-                    tgt AS point1_id,
-                    'author' AS point2_type,
-                    'sim' AS point1_type,
-                    '' AS value,
-                    (UNIX_TIMESTAMP() * 1000000) AS ts_us,
-                    'sim_author' AS edge_type,
-                    ratio_src AS order_rate_weight
-            FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
-            WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
-            AND     edge_type = 'author_sell_sim_1d'
+        SELECT  src AS point2_id,
+                tgt AS point1_id,
+                'author' AS point2_type,
+                'sim' AS point1_type,
+                '' AS value,
+                (UNIX_TIMESTAMP() * 1000000) AS ts_us,
+                'sim_author' AS edge_type,
+                ratio_src AS order_rate_weight
+        FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
+        WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
+        AND     edge_type = 'author_sell_sim_1d'
         ) a;`
 
 const multiRewrittenSQL = "select distinct named_struct('id', cast(point1_id as string)) as outv_pk_prop, cast(point2_id as string) as bg__id, point1_type as outv_label, point2_type as bg__bg__label, edge_type as label, cast(order_rate_weight as float) as order_rate_weight from (select src as point1_id, tgt as point2_id, 'shop' as point1_type, 'sim' as point2_type, '' as value, (UNIX_TIMESTAMP() * 1000000) as ts_us, 'shop_sim' as edge_type, ratio_src as order_rate_weight from dm_temai.shop_gandalf_v1_3_graph_structure_di where `date` = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di') and edge_type = 'shop_sell_sim_1d') as a;\nselect distinct named_struct('id', cast(point1_id as string)) as outv_pk_prop, cast(point2_id as string) as bg__id, point1_type as outv_label, point2_type as bg__bg__label, edge_type as label, cast(order_rate_weight as float) as order_rate_weight from (select src as point2_id, tgt as point1_id, 'shop' as point2_type, 'sim' as point1_type, '' as value, (UNIX_TIMESTAMP() * 1000000) as ts_us, 'sim_shop' as edge_type, ratio_src as order_rate_weight from dm_temai.shop_gandalf_v1_3_graph_structure_di where `date` = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di') and edge_type = 'shop_sell_sim_1d') as a;\nselect distinct named_struct('id', cast(point1_id as string)) as outv_pk_prop, cast(point2_id as string) as bg__id, point1_type as outv_label, point2_type as bg__bg__label, edge_type as label, cast(order_rate_weight as float) as order_rate_weight from (select src as point1_id, tgt as point2_id, 'author' as point1_type, 'sim' as point2_type, '' as value, (UNIX_TIMESTAMP() * 1000000) as ts_us, 'author_sim' as edge_type, ratio_src as order_rate_weight from dm_temai.shop_gandalf_v1_3_graph_structure_di where `date` = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di') and edge_type = 'author_sell_sim_1d') as a;\nselect distinct named_struct('id', cast(point1_id as string)) as outv_pk_prop, cast(point2_id as string) as bg__id, point1_type as outv_label, point2_type as bg__bg__label, edge_type as label, cast(order_rate_weight as float) as order_rate_weight from (select src as point2_id, tgt as point1_id, 'author' as point2_type, 'sim' as point1_type, '' as value, (UNIX_TIMESTAMP() * 1000000) as ts_us, 'sim_author' as edge_type, ratio_src as order_rate_weight from dm_temai.shop_gandalf_v1_3_graph_structure_di where `date` = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di') and edge_type = 'author_sell_sim_1d') as a"
 
 func TestRewriteShopAuthorEdgeQueries(t *testing.T) {
 	t.Parallel()
+
+	const shopToAuthorOriginalSQL = `SELECT  point1_id,
+        point2_id,
+        point1_type,
+        point2_type,
+        value,
+        ts_us,
+        edge_type,
+        cast(order_rate_weight as float)
+FROM    (
+        SELECT  distinct src AS point1_id,
+                tgt AS point2_id,
+                'shop' AS point1_type,
+                'author' AS point2_type,
+                '' AS value,
+                (UNIX_TIMESTAMP() * 1000000) AS ts_us,
+                'shop_author' AS edge_type,
+                ratio_src AS order_rate_weight
+        FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
+        WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
+        and edge_type = 'shop_sell_author_1d'
+        ) a`
 
 	tests := []struct {
 		name           string
@@ -151,7 +151,7 @@ func TestRewriteShopAuthorEdgeQueries(t *testing.T) {
 		wantRewritten  string
 	}{{
 		name:           "shop_to_author",
-		input:          shopAuthorOriginalSQL,
+		input:          shopToAuthorOriginalSQL,
 		wantNormalized: "select point1_id, point2_id, point1_type, point2_type, value, ts_us, edge_type, cast(order_rate_weight as float) from (select distinct src as point1_id, tgt as point2_id, 'shop' as point1_type, 'author' as point2_type, '' as value, (UNIX_TIMESTAMP() * 1000000) as ts_us, 'shop_author' as edge_type, ratio_src as order_rate_weight from dm_temai.shop_gandalf_v1_3_graph_structure_di where `date` = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di') and edge_type = 'shop_sell_author_1d') as a",
 		wantRewritten:  "select named_struct('id', cast(point1_id as string)) as outv_pk_prop, cast(point2_id as string) as bg__id, point1_type as outv_label, point2_type as bg__bg__label, edge_type as label, cast(order_rate_weight as float) as order_rate_weight from (select distinct src as point1_id, tgt as point2_id, 'shop' as point1_type, 'author' as point2_type, '' as value, (UNIX_TIMESTAMP() * 1000000) as ts_us, 'shop_author' as edge_type, ratio_src as order_rate_weight from dm_temai.shop_gandalf_v1_3_graph_structure_di where `date` = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di') and edge_type = 'shop_sell_author_1d') as a",
 	}, {
@@ -222,7 +222,6 @@ func rewritePointEdgeStatements(t testing.TB, sql string) string {
 
 	return strings.Join(rewritten, ";\n")
 }
-
 func rewritePointEdgeSelect(t testing.TB, sel *Select) {
 	t.Helper()
 
