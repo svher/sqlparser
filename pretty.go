@@ -22,8 +22,6 @@ func PrettyFormatter(buf *TrackedBuffer, node SQLNode) {
 		prettyFormatOrderByClause(buf, node)
 	case *Limit:
 		prettyFormatLimitClause(buf, node)
-	case *AliasedTableExpr:
-		prettyFormatAliasedTableExpr(buf, node)
 	case *Subquery:
 		prettyFormatSubquery(buf, node)
 	default:
@@ -234,31 +232,20 @@ func ensureClauseNewline(buf *TrackedBuffer) {
 	buf.WriteByte('\n')
 }
 
-func prettyFormatAliasedTableExpr(buf *TrackedBuffer, node *AliasedTableExpr) {
-	if node == nil {
-		return
-	}
-	buf.Myprintf("%v%v", node.Expr, node.Partitions)
-	if !node.As.IsEmpty() {
-		buf.Myprintf(" as %v", node.As)
-	}
-	if node.Hints != nil {
-		buf.Myprintf("%v", node.Hints)
-	}
-}
-
 func prettyFormatSubquery(buf *TrackedBuffer, node *Subquery) {
 	if node == nil || node.Select == nil {
 		buf.WriteString("()")
 		return
 	}
-	inner := String(node.Select, true)
-	if inner == "" {
+	inner := NewTrackedBuffer(buf.nodeFormatter)
+	inner.Myprintf("%v", node.Select)
+	innerSQL := inner.String()
+	if innerSQL == "" {
 		buf.WriteString("()")
 		return
 	}
 	buf.WriteString("(\n")
-	buf.WriteString(indentLines(inner, "\t"))
+	buf.WriteString(indentLines(innerSQL, "\t"))
 	buf.WriteString("\n)")
 }
 
