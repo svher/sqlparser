@@ -58,14 +58,14 @@ func TestSelect(t *testing.T) {
 	sel := &Select{}
 	sel.AddWhere(expr)
 	buf := NewTrackedBuffer(nil)
-	sel.Where.Format(buf, buf.Pretty())
+	sel.Where.Format(buf, false)
 	want := " where a = 1"
 	if buf.String() != want {
 		t.Errorf("where: %q, want %s", buf.String(), want)
 	}
 	sel.AddWhere(expr)
 	buf = NewTrackedBuffer(nil)
-	sel.Where.Format(buf, buf.Pretty())
+	sel.Where.Format(buf, false)
 	want = " where a = 1 and a = 1"
 	if buf.String() != want {
 		t.Errorf("where: %q, want %s", buf.String(), want)
@@ -73,14 +73,14 @@ func TestSelect(t *testing.T) {
 	sel = &Select{}
 	sel.AddHaving(expr)
 	buf = NewTrackedBuffer(nil)
-	sel.Having.Format(buf, buf.Pretty())
+	sel.Having.Format(buf, false)
 	want = " having a = 1"
 	if buf.String() != want {
 		t.Errorf("having: %q, want %s", buf.String(), want)
 	}
 	sel.AddHaving(expr)
 	buf = NewTrackedBuffer(nil)
-	sel.Having.Format(buf, buf.Pretty())
+	sel.Having.Format(buf, false)
 	want = " having a = 1 and a = 1"
 	if buf.String() != want {
 		t.Errorf("having: %q, want %s", buf.String(), want)
@@ -95,7 +95,7 @@ func TestSelect(t *testing.T) {
 	sel = &Select{}
 	sel.AddWhere(expr)
 	buf = NewTrackedBuffer(nil)
-	sel.Where.Format(buf, buf.Pretty())
+	sel.Where.Format(buf, false)
 	want = " where (a = 1 or b = 1)"
 	if buf.String() != want {
 		t.Errorf("where: %q, want %s", buf.String(), want)
@@ -103,7 +103,7 @@ func TestSelect(t *testing.T) {
 	sel = &Select{}
 	sel.AddHaving(expr)
 	buf = NewTrackedBuffer(nil)
-	sel.Having.Format(buf, buf.Pretty())
+	sel.Having.Format(buf, false)
 	want = " having (a = 1 or b = 1)"
 	if buf.String() != want {
 		t.Errorf("having: %q, want %s", buf.String(), want)
@@ -120,7 +120,6 @@ func TestPrettyFormatterClauses(t *testing.T) {
 	}
 
 	buf := NewTrackedBuffer(PrettyFormatter)
-	buf.SetPretty(true)
 	buf.Myprintf("%v", stmt)
 	if got, want := buf.String(), "update foo set bar = 1\nwhere baz = 2\norder by bar desc\nlimit 5"; got != want {
 		t.Errorf("pretty tracked buffer:\n%s\nwant:\n%s", got, want)
@@ -141,7 +140,7 @@ func TestRemoveHints(t *testing.T) {
 			sel.From[0].(*AliasedTableExpr).RemoveHints(),
 		}
 		buf := NewTrackedBuffer(nil)
-		sel.Format(buf, buf.Pretty())
+		sel.Format(buf, false)
 		if got, want := buf.String(), "select * from t"; got != want {
 			t.Errorf("stripped query: %s, want %s", got, want)
 		}
@@ -160,7 +159,7 @@ func TestAddOrder(t *testing.T) {
 	}
 	dst.(*Select).AddOrder(order)
 	buf := NewTrackedBuffer(nil)
-	dst.Format(buf, buf.Pretty())
+	dst.Format(buf, false)
 	want := "select * from t order by foo asc"
 	if buf.String() != want {
 		t.Errorf("order: %q, want %s", buf.String(), want)
@@ -171,7 +170,7 @@ func TestAddOrder(t *testing.T) {
 	}
 	dst.(*Union).AddOrder(order)
 	buf = NewTrackedBuffer(nil)
-	dst.Format(buf, buf.Pretty())
+	dst.Format(buf, false)
 	want = "select * from t union select * from s order by foo asc"
 	if buf.String() != want {
 		t.Errorf("order: %q, want %s", buf.String(), want)
@@ -190,7 +189,7 @@ func TestSetLimit(t *testing.T) {
 	}
 	dst.(*Select).SetLimit(limit)
 	buf := NewTrackedBuffer(nil)
-	dst.Format(buf, buf.Pretty())
+	dst.Format(buf, false)
 	want := "select * from t limit 4"
 	if buf.String() != want {
 		t.Errorf("limit: %q, want %s", buf.String(), want)
@@ -201,7 +200,7 @@ func TestSetLimit(t *testing.T) {
 	}
 	dst.(*Union).SetLimit(limit)
 	buf = NewTrackedBuffer(nil)
-	dst.Format(buf, buf.Pretty())
+	dst.Format(buf, false)
 	want = "select * from t union select * from s limit 4"
 	if buf.String() != want {
 		t.Errorf("order: %q, want %s", buf.String(), want)
@@ -211,13 +210,13 @@ func TestSetLimit(t *testing.T) {
 func TestWhere(t *testing.T) {
 	var w *Where
 	buf := NewTrackedBuffer(nil)
-	w.Format(buf, buf.Pretty())
+	w.Format(buf, false)
 	if buf.String() != "" {
 		t.Errorf("w.Format(nil): %q, want \"\"", buf.String())
 	}
 	w = NewWhere(WhereStr, nil)
 	buf = NewTrackedBuffer(nil)
-	w.Format(buf, buf.Pretty())
+	w.Format(buf, false)
 	if buf.String() != "" {
 		t.Errorf("w.Format(&Where{nil}: %q, want \"\"", buf.String())
 	}

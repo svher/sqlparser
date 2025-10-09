@@ -23,33 +23,7 @@ import (
 
 // NodeFormatter defines the signature of a custom node formatter
 // function that can be given to TrackedBuffer for code generation.
-type NodeFormatter func(buf *TrackedBuffer, node SQLNode, pretty bool)
-
-// PrettyFormatter is a NodeFormatter implementation that produces a
-// human-friendly, multi-line rendering of SQL nodes when the TrackedBuffer is
-// configured for pretty output. It falls back to the default formatting for
-// nodes that don't require special handling.
-func PrettyFormatter(buf *TrackedBuffer, node SQLNode, pretty bool) {
-	if !pretty {
-		node.Format(buf, pretty)
-		return
-	}
-
-	switch node := node.(type) {
-	case *Select:
-		node.formatPretty(buf)
-	case *Where:
-		prettyFormatWhere(buf, node)
-	case GroupBy:
-		prettyFormatGroupBy(buf, node)
-	case OrderBy:
-		prettyFormatOrderBy(buf, node)
-	case *Limit:
-		prettyFormatLimit(buf, node)
-	default:
-		node.Format(buf, pretty)
-	}
-}
+type NodeFormatter func(buf *TrackedBuffer, node SQLNode)
 
 // TrackedBuffer is used to rebuild a query from the ast.
 // bindLocations keeps track of locations in the buffer that
@@ -62,7 +36,6 @@ type TrackedBuffer struct {
 	*bytes.Buffer
 	bindLocations []bindLocation
 	nodeFormatter NodeFormatter
-	pretty        bool
 }
 
 // NewTrackedBuffer creates a new TrackedBuffer.
@@ -71,17 +44,6 @@ func NewTrackedBuffer(nodeFormatter NodeFormatter) *TrackedBuffer {
 		Buffer:        new(bytes.Buffer),
 		nodeFormatter: nodeFormatter,
 	}
-}
-
-// SetPretty configures whether the tracked buffer should request pretty
-// formatting when rendering SQL nodes.
-func (buf *TrackedBuffer) SetPretty(pretty bool) {
-	buf.pretty = pretty
-}
-
-// Pretty reports whether the tracked buffer is configured for pretty output.
-func (buf *TrackedBuffer) Pretty() bool {
-	return buf.pretty
 }
 
 // WriteNode function, initiates the writing of a single SQLNode tree by passing
@@ -133,11 +95,7 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 			}
 		case 'v':
 			node := values[fieldnum].(SQLNode)
-			if buf.nodeFormatter == nil {
-				node.Format(buf, buf.pretty)
-			} else {
-				buf.nodeFormatter(buf, node, buf.pretty)
-			}
+			buf.formatNode(node)
 		case 'a':
 			buf.WriteArg(values[fieldnum].(string))
 		default:
@@ -148,48 +106,15 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 	}
 }
 
-func prettyFormatWhere(buf *TrackedBuffer, node *Where) {
-	if node == nil || node.Expr == nil {
-		return
-	}
-	buf.Myprintf("\n%s %v", node.Type, node.Expr)
-}
-
-func prettyFormatGroupBy(buf *TrackedBuffer, node GroupBy) {
-	if len(node) == 0 {
-		return
-	}
-	buf.WriteString("\ngroup by ")
-	for i, expr := range node {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		buf.Myprintf("%v", expr)
-	}
-}
-
-func prettyFormatOrderBy(buf *TrackedBuffer, node OrderBy) {
-	if len(node) == 0 {
-		return
-	}
-	buf.WriteString("\norder by ")
-	for i, expr := range node {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		buf.Myprintf("%v", expr)
-	}
-}
-
-func prettyFormatLimit(buf *TrackedBuffer, node *Limit) {
+func (buf *TrackedBuffer) formatNode(node SQLNode) {
 	if node == nil {
 		return
 	}
-	buf.WriteString("\nlimit ")
-	if node.Offset != nil {
-		buf.Myprintf("%v, ", node.Offset)
+	if buf.nodeFormatter == nil {
+		node.Format(buf, false)
+		return
 	}
-	buf.Myprintf("%v", node.Rowcount)
+	buf.nodeFormatter(buf, node)
 }
 
 // WriteArg writes a value argument into the buffer along with
