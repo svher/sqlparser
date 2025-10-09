@@ -177,7 +177,7 @@ func TestNormalize(t *testing.T) {
 		}
 		bv := make(map[string]*querypb.BindVariable)
 		Normalize(stmt, bv, prefix)
-		outstmt := String(stmt)
+		outstmt := String(stmt, false)
 		if outstmt != tc.outstmt {
 			t.Errorf("Query:\n%s:\n%s, want\n%s", tc.in, outstmt, tc.outstmt)
 		}

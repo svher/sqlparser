@@ -27,7 +27,7 @@ func RewriteSqls(sql string) (string, error) {
 		if err := rewriteSql(selectStmt); err != nil {
 			return "", err
 		}
-		rewritten = append(rewritten, String(selectStmt))
+		rewritten = append(rewritten, String(selectStmt, true))
 	}
 
 	return strings.Join(rewritten, ";\n"), nil
@@ -88,13 +88,13 @@ func rewriteEdgeSql(sel *Select) (bool, error) {
 		return false, fmt.Errorf("missing required columns: p1=%t p2=%t p1Type=%t p2Type=%t", point1ID != nil, point2ID != nil, point1Type != nil, point2Type != nil)
 	}
 
-	point1Expr, err := newAliasedExprFromString(fmt.Sprintf("named_struct('id', cast(%s as string))", String(point1ID.Expr)), "outv_pk_prop")
+	point1Expr, err := newAliasedExprFromString(fmt.Sprintf("named_struct('id', cast(%s as string))", String(point1ID.Expr, false)), "outv_pk_prop")
 	if err != nil {
 		return false, err
 	}
 	selectExprs := SelectExprs{point1Expr}
 
-	point2Expr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(point2ID.Expr)), "bg__id")
+	point2Expr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(point2ID.Expr, false)), "bg__id")
 	if err != nil {
 		return false, err
 	}
@@ -170,7 +170,7 @@ func rewritePointSql(sel *Select) (bool, error) {
 
 	pointType.As = NewColIdent("label")
 
-	pointIDExpr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(pointID.Expr)), "id")
+	pointIDExpr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(pointID.Expr, false)), "id")
 	if err != nil {
 		return false, err
 	}

@@ -182,15 +182,175 @@ func Walk(visit Visit, nodes ...SQLNode) error {
 	return nil
 }
 
-// String returns a string representation of an SQLNode.
-func String(node SQLNode) string {
+// String returns a string representation of an SQLNode. If pretty is true, the
+// output is formatted with additional indentation to improve readability when
+// possible. Pretty formatting currently focuses on SELECT statements and falls
+// back to the default rendering for other node types.
+func String(node SQLNode, pretty bool) string {
 	if node == nil {
 		return "<nil>"
+	}
+
+	if pretty {
+		if out, ok := prettyString(node); ok {
+			return out
+		}
 	}
 
 	buf := NewTrackedBuffer(nil)
 	buf.Myprintf("%v", node)
 	return buf.String()
+}
+
+func prettyString(node SQLNode) (string, bool) {
+	switch n := node.(type) {
+	case *Select:
+		return prettySelect(n), true
+	default:
+		return "", false
+	}
+}
+
+func prettySelect(node *Select) string {
+	var b strings.Builder
+
+	if len(node.Comments) > 0 {
+		comments := strings.TrimSpace(String(node.Comments, false))
+		if comments != "" {
+			b.WriteString(comments)
+			b.WriteByte('\n')
+		}
+	}
+
+	b.WriteString("select")
+
+	appendClause := func(value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		b.WriteByte(' ')
+		b.WriteString(strings.TrimSpace(value))
+	}
+
+	appendClause(node.Cache)
+	appendClause(node.Distinct)
+	appendClause(node.Hints)
+
+	if len(node.SelectExprs) > 0 {
+		b.WriteByte('\n')
+		indent := "  "
+		for i, expr := range node.SelectExprs {
+			if i > 0 {
+				b.WriteString(",\n")
+			}
+			b.WriteString(indent)
+			b.WriteString(String(expr, false))
+		}
+	}
+
+	if len(node.From) > 0 {
+		b.WriteString("\nfrom ")
+		for i, table := range node.From {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			if pretty, ok := prettyTableExpr(table); ok {
+				b.WriteString(pretty)
+				continue
+			}
+			b.WriteString(String(table, false))
+		}
+	}
+
+	if node.Where != nil && node.Where.Expr != nil {
+		b.WriteByte('\n')
+		b.WriteString(node.Where.Type)
+		b.WriteByte(' ')
+		b.WriteString(String(node.Where.Expr, false))
+	}
+
+	if len(node.GroupBy) > 0 {
+		b.WriteString("\ngroup by ")
+		for i, expr := range node.GroupBy {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(String(expr, false))
+		}
+	}
+
+	if node.Having != nil && node.Having.Expr != nil {
+		b.WriteByte('\n')
+		b.WriteString(node.Having.Type)
+		b.WriteByte(' ')
+		b.WriteString(String(node.Having.Expr, false))
+	}
+
+	if len(node.OrderBy) > 0 {
+		b.WriteString("\norder by ")
+		for i, order := range node.OrderBy {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(String(order, false))
+		}
+	}
+
+	if node.Limit != nil {
+		b.WriteString("\nlimit ")
+		if node.Limit.Offset != nil {
+			b.WriteString(String(node.Limit.Offset, false))
+			b.WriteString(", ")
+		}
+		b.WriteString(String(node.Limit.Rowcount, false))
+	}
+
+	if node.Lock != "" {
+		lock := strings.TrimSpace(node.Lock)
+		if lock != "" {
+			b.WriteByte('\n')
+			b.WriteString(lock)
+		}
+	}
+
+	return b.String()
+}
+
+func prettyTableExpr(expr TableExpr) (string, bool) {
+	switch t := expr.(type) {
+	case *AliasedTableExpr:
+		switch sub := t.Expr.(type) {
+		case *Subquery:
+			inner := String(sub.Select, true)
+			var sb strings.Builder
+			sb.WriteString("(\n")
+			sb.WriteString(indentLines(inner, "  "))
+			sb.WriteString("\n)")
+			if len(t.Partitions) > 0 {
+				sb.WriteString(String(t.Partitions, false))
+			}
+			if !t.As.IsEmpty() {
+				sb.WriteString(" as ")
+				sb.WriteString(t.As.String())
+			}
+			if t.Hints != nil {
+				sb.WriteString(String(t.Hints, false))
+			}
+			return sb.String(), true
+		}
+	}
+	return "", false
+}
+
+func indentLines(s, indent string) string {
+	if s == "" {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = indent + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Append appends the SQLNode to the buffer.
@@ -975,16 +1135,16 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 		opts = append(opts, keywordStrings[NOT], keywordStrings[NULL])
 	}
 	if ct.Default != nil {
-		opts = append(opts, keywordStrings[DEFAULT], String(ct.Default))
+		opts = append(opts, keywordStrings[DEFAULT], String(ct.Default, false))
 	}
 	if ct.OnUpdate != nil {
-		opts = append(opts, keywordStrings[ON], keywordStrings[UPDATE], String(ct.OnUpdate))
+		opts = append(opts, keywordStrings[ON], keywordStrings[UPDATE], String(ct.OnUpdate, false))
 	}
 	if ct.Autoincrement {
 		opts = append(opts, keywordStrings[AUTO_INCREMENT])
 	}
 	if ct.Comment != nil {
-		opts = append(opts, keywordStrings[COMMENT_KEYWORD], String(ct.Comment))
+		opts = append(opts, keywordStrings[COMMENT_KEYWORD], String(ct.Comment, false))
 	}
 	if ct.KeyOpt == colKeyPrimary {
 		opts = append(opts, keywordStrings[PRIMARY], keywordStrings[KEY])

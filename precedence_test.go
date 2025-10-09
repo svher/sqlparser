@@ -32,7 +32,7 @@ func readable(node Expr) string {
 	case *IsExpr:
 		return fmt.Sprintf("(%s %s)", readable(node.Expr), node.Operator)
 	default:
-		return String(node)
+		return String(node, false)
 	}
 }
 

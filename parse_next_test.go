@@ -46,14 +46,14 @@ func TestParseNextValid(t *testing.T) {
 			continue
 		}
 
-		if got := String(tree); got != want {
+		if got := String(tree, false); got != want {
 			t.Fatalf("[%d] ParseNext(%q) = %q, want %q", i, input, got, want)
 		}
 	}
 
 	// Read once more and it should be EOF.
 	if tree, err := ParseNext(tokens); err != io.EOF {
-		t.Errorf("ParseNext(tokens) = (%q, %v) want io.EOF", String(tree), err)
+		t.Errorf("ParseNext(tokens) = (%q, %v) want io.EOF", String(tree, false), err)
 	}
 }
 
@@ -84,13 +84,13 @@ func TestParseNextErrors(t *testing.T) {
 		}
 
 		want := "select 1 from t"
-		if got := String(tree); got != want {
+		if got := String(tree, false); got != want {
 			t.Fatalf("[1] ParseNext(%q) = %q, want %q", sql, got, want)
 		}
 
 		// Read once more and it should be EOF.
 		if tree, err := ParseNext(tokens); err != io.EOF {
-			t.Errorf("ParseNext(tokens) = (%q, %v) want io.EOF", String(tree), err)
+			t.Errorf("ParseNext(tokens) = (%q, %v) want io.EOF", String(tree, false), err)
 		}
 	}
 }
@@ -145,19 +145,19 @@ func TestParseNextEdgeCases(t *testing.T) {
 				continue
 			}
 
-			if got := String(tree); got != want {
+			if got := String(tree, false); got != want {
 				t.Fatalf("[%d] ParseNext(%q) = %q, want %q", i, test.input, got, want)
 			}
 		}
 
 		// Read once more and it should be EOF.
 		if tree, err := ParseNext(tokens); err != io.EOF {
-			t.Errorf("ParseNext(%q) = (%q, %v) want io.EOF", test.input, String(tree), err)
+			t.Errorf("ParseNext(%q) = (%q, %v) want io.EOF", test.input, String(tree, false), err)
 		}
 
 		// And again, once more should be EOF.
 		if tree, err := ParseNext(tokens); err != io.EOF {
-			t.Errorf("ParseNext(%q) = (%q, %v) want io.EOF", test.input, String(tree), err)
+			t.Errorf("ParseNext(%q) = (%q, %v) want io.EOF", test.input, String(tree, false), err)
 		}
 	}
 }
