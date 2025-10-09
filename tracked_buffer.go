@@ -95,7 +95,14 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 			}
 		case 'v':
 			node := values[fieldnum].(SQLNode)
-			buf.formatNode(node)
+			if node == nil {
+				break
+			}
+			if buf.nodeFormatter == nil {
+				node.Format(buf)
+			} else {
+				buf.nodeFormatter(buf, node)
+			}
 		case 'a':
 			buf.WriteArg(values[fieldnum].(string))
 		default:
@@ -104,17 +111,6 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 		fieldnum++
 		i++
 	}
-}
-
-func (buf *TrackedBuffer) formatNode(node SQLNode) {
-	if node == nil {
-		return
-	}
-	if buf.nodeFormatter == nil {
-		node.Format(buf)
-		return
-	}
-	buf.nodeFormatter(buf, node)
 }
 
 // WriteArg writes a value argument into the buffer along with

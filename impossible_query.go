@@ -29,11 +29,11 @@ func FormatImpossibleQuery(buf *TrackedBuffer, node SQLNode) {
 	case *Select:
 		buf.Myprintf("select %v from %v where 1 != 1", node.SelectExprs, node.From)
 		if node.GroupBy != nil {
-			buf.formatNode(node.GroupBy)
+			node.GroupBy.Format(buf)
 		}
 	case *Union:
 		buf.Myprintf("%v %s %v", node.Left, node.Type, node.Right)
 	default:
-		buf.formatNode(node)
+		node.Format(buf)
 	}
 }
