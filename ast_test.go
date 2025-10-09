@@ -168,6 +168,21 @@ func TestPrettyFormatterWhereMixedBooleanAlignment(t *testing.T) {
 	}
 }
 
+func TestPrettyFormatterLogicalClauseAlignmentWithShortKeyword(t *testing.T) {
+	stmt, err := Parse("select * from t where a = b and c = d")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sel := stmt.(*Select)
+	sel.Where.Type = "on"
+
+	const want = "select *\nfrom t\non a = b\nand c = d"
+	if got := String(sel, true); got != want {
+		t.Errorf("pretty select with short keyword alignment:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestRemoveHints(t *testing.T) {
 	for _, query := range []string{
 		"select * from t use index (i)",

@@ -1,6 +1,9 @@
 package sqlparser
 
-import "strings"
+import (
+	"bytes"
+	"strings"
+)
 
 // PrettyFormatter is a NodeFormatter implementation that produces a
 // human-friendly, multi-line rendering of SQL nodes when pretty output is
@@ -120,10 +123,16 @@ func prettyFormatWhereClause(buf *TrackedBuffer, node *Where) {
 }
 
 func prettyFormatLogicalClause(buf *TrackedBuffer, keyword string, expr Expr) {
+	if buf == nil {
+		return
+	}
+
 	buf.WriteString(keyword)
 	buf.WriteByte(' ')
 
-	prettyFormatBooleanExpr(buf, expr, len(keyword)+1)
+	indent := currentLineColumn(buf)
+
+	prettyFormatBooleanExpr(buf, expr, indent)
 }
 
 func prettyFormatBooleanExpr(buf *TrackedBuffer, expr Expr, indent int) {
@@ -140,8 +149,8 @@ func prettyFormatBooleanExpr(buf *TrackedBuffer, expr Expr, indent int) {
 	prettyFormatBooleanExpr(buf, terms[0], indent)
 
 	padding := indent - (len(op) + 1)
-	if padding < 1 {
-		padding = 1
+	if padding < 0 {
+		padding = 0
 	}
 	pad := strings.Repeat(" ", padding)
 
@@ -152,6 +161,24 @@ func prettyFormatBooleanExpr(buf *TrackedBuffer, expr Expr, indent int) {
 		buf.WriteString(pad)
 		prettyFormatBooleanExpr(buf, term, indent)
 	}
+}
+
+func currentLineColumn(buf *TrackedBuffer) int {
+	if buf == nil {
+		return 0
+	}
+
+	data := buf.Bytes()
+	if len(data) == 0 {
+		return 0
+	}
+
+	idx := bytes.LastIndexByte(data, '\n')
+	if idx == -1 {
+		return len(data)
+	}
+
+	return len(data) - idx - 1
 }
 
 func flattenBooleanExpr(expr Expr) (string, []Expr) {
