@@ -111,6 +111,12 @@ var (
 	}, {
 		input: "select /* union with limit on lhs */ 1 from t limit 1 union select 1 from t",
 	}, {
+		input:  "WITH new_df AS (SELECT 1 FROM t) SELECT * FROM new_df",
+		output: "with new_df as (select 1 from t) select * from new_df",
+	}, {
+		input:  "with cte (col1, col2) as (select a, b from t) select col1 from cte",
+		output: "with cte(col1, col2) as (select a, b from t) select col1 from cte",
+	}, {
 		input:  "(select id, a from t order by id limit 1) union (select id, b as a from s order by id limit 1) order by a limit 1",
 		output: "(select id, a from t order by id asc limit 1) union (select id, b as a from s order by id asc limit 1) order by a asc limit 1",
 	}, {

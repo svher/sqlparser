@@ -64,6 +64,8 @@ func forceEOF(yylex interface{}) {
   selectExprs   SelectExprs
   selectExpr    SelectExpr
   columns       Columns
+  commonTableExpr *CommonTableExpr
+  commonTableExprs CommonTableExprs
   partitions    Partitions
   colName       *ColName
   tableExprs    TableExprs
@@ -242,7 +244,9 @@ func forceEOF(yylex interface{}) {
 %type <str> asc_desc_opt
 %type <limit> limit_opt
 %type <str> lock_opt
-%type <columns> ins_column_list column_list
+%type <columns> ins_column_list column_list cte_column_list_opt
+%type <commonTableExpr> common_table_expr
+%type <commonTableExprs> common_table_expr_list
 %type <partitions> opt_partition_clause partition_list
 %type <updateExprs> on_dup_opt
 %type <updateExprs> update_list
@@ -331,7 +335,11 @@ command:
 | other_statement
 
 select_statement:
-  base_select order_by_opt limit_opt lock_opt
+  WITH common_table_expr_list select_statement
+  {
+    $$ = &With{CTEs: $2, Stmt: $3}
+  }
+| base_select order_by_opt limit_opt lock_opt
   {
     sel := $1.(*Select)
     sel.OrderBy = $2
@@ -379,6 +387,31 @@ union_rhs:
 | openb select_statement closeb
   {
     $$ = &ParenSelect{Select: $2}
+  }
+
+common_table_expr_list:
+  common_table_expr
+  {
+    $$ = CommonTableExprs{$1}
+  }
+| common_table_expr_list ',' common_table_expr
+  {
+    $$ = append($1, $3)
+  }
+
+common_table_expr:
+  table_id cte_column_list_opt AS openb select_statement closeb
+  {
+    $$ = &CommonTableExpr{Name: $1, Columns: $2, Subquery: $5}
+  }
+
+cte_column_list_opt:
+  {
+    $$ = nil
+  }
+| openb ins_column_list closeb
+  {
+    $$ = $2
   }
 
 

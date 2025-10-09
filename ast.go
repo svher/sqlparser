@@ -208,6 +208,7 @@ type Statement interface {
 }
 
 func (*Union) iStatement()      {}
+func (*With) iStatement()       {}
 func (*Select) iStatement()     {}
 func (*Stream) iStatement()     {}
 func (*Insert) iStatement()     {}
@@ -239,9 +240,42 @@ type SelectStatement interface {
 	SQLNode
 }
 
+func (*With) iSelectStatement()        {}
 func (*Select) iSelectStatement()      {}
 func (*Union) iSelectStatement()       {}
 func (*ParenSelect) iSelectStatement() {}
+
+// With represents a WITH clause wrapping another SelectStatement.
+type With struct {
+	CTEs CommonTableExprs
+	Stmt SelectStatement
+}
+
+// AddOrder adds an order by element to the underlying statement.
+func (node *With) AddOrder(order *Order) {
+	node.Stmt.AddOrder(order)
+}
+
+// SetLimit sets the limit clause on the underlying statement.
+func (node *With) SetLimit(limit *Limit) {
+	node.Stmt.SetLimit(limit)
+}
+
+// Format formats the node.
+func (node *With) Format(buf *TrackedBuffer) {
+	buf.Myprintf("with %v %v", node.CTEs, node.Stmt)
+}
+
+func (node *With) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.CTEs,
+		node.Stmt,
+	)
+}
 
 // Select represents a SELECT statement.
 type Select struct {
@@ -510,6 +544,7 @@ type InsertRows interface {
 	SQLNode
 }
 
+func (*With) iInsertRows()        {}
 func (*Select) iInsertRows()      {}
 func (*Union) iInsertRows()       {}
 func (Values) iInsertRows()       {}
@@ -1552,6 +1587,54 @@ func (node Columns) Format(buf *TrackedBuffer) {
 		prefix = ", "
 	}
 	buf.WriteString(")")
+}
+
+// CommonTableExprs represents a list of common table expressions.
+type CommonTableExprs []*CommonTableExpr
+
+// Format formats the node.
+func (node CommonTableExprs) Format(buf *TrackedBuffer) {
+	prefix := ""
+	for _, n := range node {
+		buf.Myprintf("%s%v", prefix, n)
+		prefix = ", "
+	}
+}
+
+func (node CommonTableExprs) walkSubtree(visit Visit) error {
+	for _, n := range node {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CommonTableExpr represents a single common table expression definition.
+type CommonTableExpr struct {
+	Name     TableIdent
+	Columns  Columns
+	Subquery SelectStatement
+}
+
+// Format formats the node.
+func (node *CommonTableExpr) Format(buf *TrackedBuffer) {
+	if node == nil {
+		return
+	}
+	buf.Myprintf("%v%v as (%v)", node.Name, node.Columns, node.Subquery)
+}
+
+func (node *CommonTableExpr) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		node.Columns,
+		node.Subquery,
+	)
 }
 
 func (node Columns) walkSubtree(visit Visit) error {
