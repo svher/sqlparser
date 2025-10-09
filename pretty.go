@@ -15,13 +15,13 @@ func PrettyFormatter(buf *TrackedBuffer, node SQLNode) {
 	case *Select:
 		prettyFormatSelect(buf, node)
 	case *Where:
-		prettyFormatWhere(buf, node)
+		prettyFormatClause(buf, node)
 	case GroupBy:
-		prettyFormatGroupBy(buf, node)
+		prettyFormatClause(buf, node)
 	case OrderBy:
-		prettyFormatOrderBy(buf, node)
+		prettyFormatClause(buf, node)
 	case *Limit:
-		prettyFormatLimit(buf, node)
+		prettyFormatClause(buf, node)
 	case *AliasedTableExpr:
 		prettyFormatAliasedTableExpr(buf, node)
 	case *Subquery:
@@ -79,41 +79,11 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 		}
 	}
 
-	if node.Where != nil && node.Where.Expr != nil {
-		buf.Myprintf("\n%s %v", node.Where.Type, node.Where.Expr)
-	}
-
-	if len(node.GroupBy) > 0 {
-		buf.WriteString("\ngroup by ")
-		for i, expr := range node.GroupBy {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			buf.Myprintf("%v", expr)
-		}
-	}
-
-	if node.Having != nil && node.Having.Expr != nil {
-		buf.Myprintf("\n%s %v", node.Having.Type, node.Having.Expr)
-	}
-
-	if len(node.OrderBy) > 0 {
-		buf.WriteString("\norder by ")
-		for i, expr := range node.OrderBy {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			buf.Myprintf("%v", expr)
-		}
-	}
-
-	if node.Limit != nil {
-		buf.WriteString("\nlimit ")
-		if node.Limit.Offset != nil {
-			buf.Myprintf("%v, ", node.Limit.Offset)
-		}
-		buf.Myprintf("%v", node.Limit.Rowcount)
-	}
+	prettyFormatClause(buf, node.Where)
+	prettyFormatClause(buf, node.GroupBy)
+	prettyFormatClause(buf, node.Having)
+	prettyFormatClause(buf, node.OrderBy)
+	prettyFormatClause(buf, node.Limit)
 
 	if node.Lock != "" {
 		lock := strings.TrimSpace(node.Lock)
@@ -123,48 +93,15 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 	}
 }
 
-func prettyFormatWhere(buf *TrackedBuffer, node *Where) {
-	if node == nil || node.Expr == nil {
+func prettyFormatClause(buf *TrackedBuffer, node SQLNode) {
+	clause := formatClause(node)
+	if clause == "" {
 		return
 	}
-	buf.Myprintf("\n%s %v", node.Type, node.Expr)
-}
-
-func prettyFormatGroupBy(buf *TrackedBuffer, node GroupBy) {
-	if len(node) == 0 {
-		return
+	if buf.Len() > 0 {
+		buf.WriteByte('\n')
 	}
-	buf.WriteString("\ngroup by ")
-	for i, expr := range node {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		buf.Myprintf("%v", expr)
-	}
-}
-
-func prettyFormatOrderBy(buf *TrackedBuffer, node OrderBy) {
-	if len(node) == 0 {
-		return
-	}
-	buf.WriteString("\norder by ")
-	for i, expr := range node {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		buf.Myprintf("%v", expr)
-	}
-}
-
-func prettyFormatLimit(buf *TrackedBuffer, node *Limit) {
-	if node == nil {
-		return
-	}
-	buf.WriteString("\nlimit ")
-	if node.Offset != nil {
-		buf.Myprintf("%v, ", node.Offset)
-	}
-	buf.Myprintf("%v", node.Rowcount)
+	buf.WriteString(clause)
 }
 
 func prettyFormatAliasedTableExpr(buf *TrackedBuffer, node *AliasedTableExpr) {
@@ -204,4 +141,14 @@ func indentLines(s, indent string) string {
 		lines[i] = indent + line
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatClause(node SQLNode) string {
+	if node == nil {
+		return ""
+	}
+	buf := NewTrackedBuffer(nil)
+	node.Format(buf)
+	clause := buf.String()
+	return strings.TrimPrefix(clause, " ")
 }
