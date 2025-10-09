@@ -23,6 +23,37 @@ import (
 	"testing"
 )
 
+// canonicalWithCTESQL captures the formatter output for the WITH query used
+// in TestParseWithCTEOriginalSQL. sqlparser.String always normalizes keyword
+// casing and whitespace, so this canonical version is what we compare against.
+const canonicalWithCTESQL = "with new_df as (select author_id, concat_ws('-', 'highprec', convert(group_id, string)) as group_id from dm_temai.author_highprec_group_v1 where `date` = '${date}'), old_df as (select author_id, concat_ws('-', 'highprec', convert(group_id, string)) as group_id from dm_temai.author_highprec_group_v1 where `date` = '${date-1}') select if(new_df.author_id is null, old_df.author_id, new_df.author_id) as author_id, if(new_df.group_id is null, old_df.group_id, new_df.group_id) as group_id, if(new_df.author_id is null, true, false) as is_delete from new_df full outer join old_df on new_df.author_id = old_df.author_id and new_df.group_id = old_df.group_id where new_df.author_id is null or old_df.author_id is null or new_df.group_id != old_df.group_id"
+
+// originalWithCTESQL is the exact query provided in the regression report.
+const originalWithCTESQL = `with new_df as (
+    select  author_id,
+            concat_ws('-', 'highprec', cast(group_id as string)) as group_id
+    from    dm_temai.author_highprec_group_v1
+    where   date = '${date}'
+),
+old_df as (
+    select  author_id,
+            concat_ws('-', 'highprec', cast(group_id as string)) as group_id
+    from    dm_temai.author_highprec_group_v1
+    where   date = '${date-1}'
+)
+
+SELECT  IF(new_df.author_id IS NULL, old_df.author_id, new_df.author_id) AS author_id,
+        IF(new_df.group_id IS NULL, old_df.group_id, new_df.group_id) AS group_id,
+        IF(new_df.author_id IS NULL, TRUE, FALSE) AS is_delete
+FROM    new_df
+FULL OUTER JOIN
+        old_df
+ON      new_df.author_id = old_df.author_id
+AND     new_df.group_id = old_df.group_id
+WHERE   new_df.author_id IS NULL
+OR      old_df.author_id IS NULL
+OR      new_df.group_id != old_df.group_id`
+
 var (
 	validSQL = []struct {
 		input  string
@@ -1316,6 +1347,30 @@ var (
 		output: "drop database test_db",
 	}}
 )
+
+func TestParseWithCTEOriginalSQL(t *testing.T) {
+	stmt, err := Parse(originalWithCTESQL)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+
+	got := String(stmt)
+	if got != canonicalWithCTESQL {
+		t.Fatalf("sqlparser.String(stmt) = %q, want %q", got, canonicalWithCTESQL)
+	}
+}
+
+func TestParseWithCTERoundTrip(t *testing.T) {
+	stmt, err := Parse(canonicalWithCTESQL)
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+
+	got := String(stmt)
+	if got != canonicalWithCTESQL {
+		t.Fatalf("sqlparser.String(stmt) = %q, want %q", got, canonicalWithCTESQL)
+	}
+}
 
 func TestValid(t *testing.T) {
 	for _, tcase := range validSQL {

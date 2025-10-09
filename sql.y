@@ -1872,6 +1872,14 @@ outer_join:
   {
     $$ = RightJoinStr
   }
+| FULL JOIN
+  {
+    $$ = FullOuterJoinStr
+  }
+| FULL OUTER JOIN
+  {
+    $$ = FullOuterJoinStr
+  }
 
 natural_join:
  NATURAL JOIN
@@ -2488,6 +2496,10 @@ convert_type:
     $$ = &ConvertType{Type: string($1)}
   }
 | UNSIGNED INTEGER
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| ID
   {
     $$ = &ConvertType{Type: string($1)}
   }
