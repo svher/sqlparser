@@ -20,14 +20,18 @@ func RewriteSqls(sql string, pretty bool) (string, error) {
 		if stmt == nil {
 			continue
 		}
-		selectStmt, ok := stmt.(*Select)
+		unwrapped := stmt
+		if withStmt, ok := stmt.(*With); ok {
+			unwrapped = withStmt.Stmt
+		}
+		selectStmt, ok := unwrapped.(*Select)
 		if !ok {
 			return "", fmt.Errorf("unexpected statement type %T", stmt)
 		}
 		if err := rewriteSql(selectStmt); err != nil {
 			return "", err
 		}
-		rewritten = append(rewritten, String(selectStmt, pretty))
+		rewritten = append(rewritten, String(stmt, pretty))
 	}
 
 	return strings.Join(rewritten, ";\n\n"), nil

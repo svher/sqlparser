@@ -53,7 +53,8 @@ FROM    (
 }
 
 func TestRewritePointSql(t *testing.T) {
-	rewritten, err := RewriteSqls(`SELECT
+	rewritten, err := RewriteSqls(`with t1 as (select * from t)
+SELECT
     concat(cast(group_id as string), '_', main_vertical_category_ka_new) as point_id,
   'group' as point_type,
   concat(cast(group_id as string), '_', main_vertical_category_ka_new) as point_value,
@@ -120,8 +121,10 @@ func TestRewritePointSql(t *testing.T) {
   ontime_order_rate_td
 FROM
   dm_temai.shop_fusion_group_aggregation_feature_by_vet
+join t
+on 1 = 1
 WHERE
-  date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 =2 and 3=3)`, true)
+  date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 =2 and 3=3) group by d order by e`, true)
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
