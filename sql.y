@@ -64,6 +64,8 @@ func forceEOF(yylex interface{}) {
   selectExprs   SelectExprs
   selectExpr    SelectExpr
   columns       Columns
+  commonTableExpr *CommonTableExpr
+  commonTableExprs CommonTableExprs
   partitions    Partitions
   colName       *ColName
   tableExprs    TableExprs
@@ -122,7 +124,7 @@ func forceEOF(yylex interface{}) {
 %left <bytes> JOIN STRAIGHT_JOIN LEFT RIGHT INNER OUTER CROSS NATURAL USE FORCE
 %left <bytes> ON USING
 %token <empty> '(' ',' ')'
-%token <bytes> ID HEX STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
+%token <bytes> ID HEX STRING STRINGKW INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
 %token <bytes> NULL TRUE FALSE
 
 // Precedence dictated by mysql. But the vitess grammar is simplified.
@@ -242,7 +244,9 @@ func forceEOF(yylex interface{}) {
 %type <str> asc_desc_opt
 %type <limit> limit_opt
 %type <str> lock_opt
-%type <columns> ins_column_list column_list
+%type <columns> ins_column_list column_list cte_column_list_opt
+%type <commonTableExpr> common_table_expr
+%type <commonTableExprs> common_table_expr_list
 %type <partitions> opt_partition_clause partition_list
 %type <updateExprs> on_dup_opt
 %type <updateExprs> update_list
@@ -331,7 +335,11 @@ command:
 | other_statement
 
 select_statement:
-  base_select order_by_opt limit_opt lock_opt
+  WITH common_table_expr_list select_statement
+  {
+    $$ = &With{CTEs: $2, Stmt: $3}
+  }
+| base_select order_by_opt limit_opt lock_opt
   {
     sel := $1.(*Select)
     sel.OrderBy = $2
@@ -379,6 +387,31 @@ union_rhs:
 | openb select_statement closeb
   {
     $$ = &ParenSelect{Select: $2}
+  }
+
+common_table_expr_list:
+  common_table_expr
+  {
+    $$ = CommonTableExprs{$1}
+  }
+| common_table_expr_list ',' common_table_expr
+  {
+    $$ = append($1, $3)
+  }
+
+common_table_expr:
+  table_id cte_column_list_opt AS openb select_statement closeb
+  {
+    $$ = &CommonTableExpr{Name: $1, Columns: $2, Subquery: $5}
+  }
+
+cte_column_list_opt:
+  {
+    $$ = nil
+  }
+| openb ins_column_list closeb
+  {
+    $$ = $2
   }
 
 
@@ -1839,6 +1872,14 @@ outer_join:
   {
     $$ = RightJoinStr
   }
+| FULL JOIN
+  {
+    $$ = FullOuterJoinStr
+  }
+| FULL OUTER JOIN
+  {
+    $$ = FullOuterJoinStr
+  }
 
 natural_join:
  NATURAL JOIN
@@ -2252,11 +2293,11 @@ function_call_keyword:
   }
 | CONVERT openb expression ',' convert_type closeb
   {
-    $$ = &ConvertExpr{Expr: $3, Type: $5}
+$$ = &ConvertExpr{Expr: $3, Type: $5}
   }
 | CAST openb expression AS convert_type closeb
   {
-    $$ = &ConvertExpr{Expr: $3, Type: $5}
+$$ = &ConvertExpr{Expr: $3, Type: $5, Cast: true}
   }
 | CONVERT openb expression USING charset closeb
   {
@@ -2430,6 +2471,18 @@ convert_type:
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
+| FLOAT_TYPE float_length_opt
+  {
+    $$ = &ConvertType{Type: string($1)}
+    $$.Length = $2.Length
+    $$.Scale = $2.Scale
+  }
+| DOUBLE float_length_opt
+  {
+    $$ = &ConvertType{Type: string($1)}
+    $$.Length = $2.Length
+    $$.Scale = $2.Scale
+  }
 | JSON
   {
     $$ = &ConvertType{Type: string($1)}
@@ -2455,6 +2508,10 @@ convert_type:
     $$ = &ConvertType{Type: string($1)}
   }
 | UNSIGNED INTEGER
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| STRINGKW
   {
     $$ = &ConvertType{Type: string($1)}
   }
@@ -3094,6 +3151,7 @@ non_reserved_keyword:
 | SHARE
 | SIGNED
 | SMALLINT
+| STRINGKW
 | SPATIAL
 | START
 | STATUS
