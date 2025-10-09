@@ -23,7 +23,7 @@ import (
 
 // NodeFormatter defines the signature of a custom node formatter
 // function that can be given to TrackedBuffer for code generation.
-type NodeFormatter func(buf *TrackedBuffer, node SQLNode)
+type NodeFormatter func(buf *TrackedBuffer, node SQLNode, pretty bool)
 
 // TrackedBuffer is used to rebuild a query from the ast.
 // bindLocations keeps track of locations in the buffer that
@@ -36,6 +36,7 @@ type TrackedBuffer struct {
 	*bytes.Buffer
 	bindLocations []bindLocation
 	nodeFormatter NodeFormatter
+	pretty        bool
 }
 
 // NewTrackedBuffer creates a new TrackedBuffer.
@@ -44,6 +45,17 @@ func NewTrackedBuffer(nodeFormatter NodeFormatter) *TrackedBuffer {
 		Buffer:        new(bytes.Buffer),
 		nodeFormatter: nodeFormatter,
 	}
+}
+
+// SetPretty configures whether the tracked buffer should request pretty
+// formatting when rendering SQL nodes.
+func (buf *TrackedBuffer) SetPretty(pretty bool) {
+	buf.pretty = pretty
+}
+
+// Pretty reports whether the tracked buffer is configured for pretty output.
+func (buf *TrackedBuffer) Pretty() bool {
+	return buf.pretty
 }
 
 // WriteNode function, initiates the writing of a single SQLNode tree by passing
@@ -96,9 +108,9 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 		case 'v':
 			node := values[fieldnum].(SQLNode)
 			if buf.nodeFormatter == nil {
-				node.Format(buf)
+				node.Format(buf, buf.pretty)
 			} else {
-				buf.nodeFormatter(buf, node)
+				buf.nodeFormatter(buf, node, buf.pretty)
 			}
 		case 'a':
 			buf.WriteArg(values[fieldnum].(string))
