@@ -22,6 +22,10 @@ func PrettyFormatter(buf *TrackedBuffer, node SQLNode) {
 		prettyFormatOrderBy(buf, node)
 	case *Limit:
 		prettyFormatLimit(buf, node)
+	case *AliasedTableExpr:
+		prettyFormatAliasedTableExpr(buf, node)
+	case *Subquery:
+		prettyFormatSubquery(buf, node)
 	default:
 		node.Format(buf)
 	}
@@ -70,10 +74,6 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 		for i, table := range node.From {
 			if i > 0 {
 				buf.WriteString(", ")
-			}
-			if pretty, ok := prettyTableExpr(table); ok {
-				buf.WriteString(pretty)
-				continue
 			}
 			buf.Myprintf("%v", table)
 		}
@@ -167,30 +167,32 @@ func prettyFormatLimit(buf *TrackedBuffer, node *Limit) {
 	buf.Myprintf("%v", node.Rowcount)
 }
 
-func prettyTableExpr(expr TableExpr) (string, bool) {
-	switch t := expr.(type) {
-	case *AliasedTableExpr:
-		switch sub := t.Expr.(type) {
-		case *Subquery:
-			inner := String(sub.Select, true)
-			var sb strings.Builder
-			sb.WriteString("(\n")
-			sb.WriteString(indentLines(inner, "\t"))
-			sb.WriteString("\n)")
-			if len(t.Partitions) > 0 {
-				sb.WriteString(String(t.Partitions, false))
-			}
-			if !t.As.IsEmpty() {
-				sb.WriteString(" as ")
-				sb.WriteString(t.As.String())
-			}
-			if t.Hints != nil {
-				sb.WriteString(String(t.Hints, false))
-			}
-			return sb.String(), true
-		}
+func prettyFormatAliasedTableExpr(buf *TrackedBuffer, node *AliasedTableExpr) {
+	if node == nil {
+		return
 	}
-	return "", false
+	buf.Myprintf("%v%v", node.Expr, node.Partitions)
+	if !node.As.IsEmpty() {
+		buf.Myprintf(" as %v", node.As)
+	}
+	if node.Hints != nil {
+		buf.Myprintf("%v", node.Hints)
+	}
+}
+
+func prettyFormatSubquery(buf *TrackedBuffer, node *Subquery) {
+	if node == nil || node.Select == nil {
+		buf.WriteString("()")
+		return
+	}
+	inner := String(node.Select, true)
+	if inner == "" {
+		buf.WriteString("()")
+		return
+	}
+	buf.WriteString("(\n")
+	buf.WriteString(indentLines(inner, "\t"))
+	buf.WriteString("\n)")
 }
 
 func indentLines(s, indent string) string {

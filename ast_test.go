@@ -131,7 +131,7 @@ func TestPrettyFormatterSelect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "/*comment*/\nselect sql_cache distinct straight_join a,\n                                        b\nfrom t1 join (select id\nfrom t2) as sub on t1.id = sub.id\nwhere a = 1\ngroup by b, c\nhaving count(*) > 1\norder by d desc, e asc\nlimit 2, 5\nlock in share mode"
+    const want = "/*comment*/\nselect sql_cache distinct straight_join a,\n                                        b\nfrom t1 join (\n\tselect id\n\tfrom t2\n) as sub on t1.id = sub.id\nwhere a = 1\ngroup by b, c\nhaving count(*) > 1\norder by d desc, e asc\nlimit 2, 5\nlock in share mode"
 	if got := String(stmt, true); got != want {
 		t.Errorf("pretty select:\n%s\nwant:\n%s", got, want)
 	}
