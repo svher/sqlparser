@@ -1354,7 +1354,7 @@ func TestParseWithCTEOriginalSQL(t *testing.T) {
 		t.Fatalf("Parse() error: %v", err)
 	}
 
-	got := String(stmt)
+	got := String(stmt, false)
 	if got != canonicalWithCTESQL {
 		t.Fatalf("sqlparser.String(stmt) = %q, want %q", got, canonicalWithCTESQL)
 	}
@@ -1366,7 +1366,7 @@ func TestParseWithCTERoundTrip(t *testing.T) {
 		t.Fatalf("Parse() error: %v", err)
 	}
 
-	got := String(stmt)
+	got := String(stmt, false)
 	if got != canonicalWithCTESQL {
 		t.Fatalf("sqlparser.String(stmt) = %q, want %q", got, canonicalWithCTESQL)
 	}
@@ -1382,7 +1382,7 @@ func TestValid(t *testing.T) {
 			t.Errorf("Parse(%q) err: %v, want nil", tcase.input, err)
 			continue
 		}
-		out := String(tree)
+		out := String(tree, false)
 		if out != tcase.output {
 			t.Errorf("Parse(%q) = %q, want: %q", tcase.input, out, tcase.output)
 		}
@@ -1493,7 +1493,7 @@ func TestCaseSensitivity(t *testing.T) {
 			t.Errorf("input: %s, err: %v", tcase.input, err)
 			continue
 		}
-		out := String(tree)
+		out := String(tree, false)
 		if out != tcase.output {
 			t.Errorf("out: %s, want %s", out, tcase.output)
 		}
@@ -1576,7 +1576,7 @@ func TestKeywords(t *testing.T) {
 			t.Errorf("input: %s, err: %v", tcase.input, err)
 			continue
 		}
-		out := String(tree)
+		out := String(tree, false)
 		if out != tcase.output {
 			t.Errorf("out: %s, want %s", out, tcase.output)
 		}
@@ -1649,7 +1649,7 @@ func TestConvert(t *testing.T) {
 			t.Errorf("input: %s, err: %v", tcase.input, err)
 			continue
 		}
-		out := String(tree)
+		out := String(tree, false)
 		if out != tcase.output {
 			t.Errorf("out: %s, want %s", out, tcase.output)
 		}
@@ -1715,7 +1715,7 @@ func TestSubStr(t *testing.T) {
 			t.Errorf("input: %s, err: %v", tcase.input, err)
 			continue
 		}
-		out := String(tree)
+		out := String(tree, false)
 		if out != tcase.output {
 			t.Errorf("out: %s, want %s", out, tcase.output)
 		}
@@ -1917,7 +1917,7 @@ func TestCreateTable(t *testing.T) {
 			t.Errorf("input: %s, err: %v", sql, err)
 			continue
 		}
-		got := String(tree.(*DDL))
+		got := String(tree.(*DDL), false)
 
 		if sql != got {
 			t.Errorf("want:\n%s\ngot:\n%s", sql, got)
@@ -1962,7 +1962,7 @@ func TestCreateTable(t *testing.T) {
 			t.Errorf("input: %s, err: %v", tcase.input, err)
 			continue
 		}
-		if got, want := String(tree.(*DDL)), tcase.output; got != want {
+		if got, want := String(tree.(*DDL), false), tcase.output; got != want {
 			t.Errorf("Parse(%s):\n%s, want\n%s", tcase.input, got, want)
 		}
 	}
@@ -1991,7 +1991,7 @@ func TestCreateTableEscaped(t *testing.T) {
 			t.Errorf("input: %s, err: %v", tcase.input, err)
 			continue
 		}
-		if got, want := String(tree.(*DDL)), tcase.output; got != want {
+		if got, want := String(tree.(*DDL), false), tcase.output; got != want {
 			t.Errorf("Parse(%s):\n%s, want\n%s", tcase.input, got, want)
 		}
 	}
@@ -2139,7 +2139,7 @@ func BenchmarkParse1(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		_ = String(ast)
+		_ = String(ast, false)
 	}
 }
 
@@ -2150,7 +2150,7 @@ func BenchmarkParse2(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		_ = String(ast)
+		_ = String(ast, false)
 	}
 }
 

@@ -249,7 +249,7 @@ func NewPlanValue(node Expr) (sqltypes.PlanValue, error) {
 	case *NullVal:
 		return sqltypes.PlanValue{}, nil
 	}
-	return sqltypes.PlanValue{}, fmt.Errorf("expression is too complex '%v'", String(node))
+	return sqltypes.PlanValue{}, fmt.Errorf("expression is too complex '%v'", String(node, false))
 }
 
 // StringIn is a convenience function that returns
@@ -321,7 +321,7 @@ func ExtractSetValues(sql string) (keyValues map[SetKey]interface{}, scope strin
 				}
 				result[setKey] = num
 			default:
-				return nil, "", fmt.Errorf("invalid value type: %v", String(expr))
+				return nil, "", fmt.Errorf("invalid value type: %v", String(expr, false))
 			}
 		case BoolVal:
 			var val int64
@@ -336,7 +336,7 @@ func ExtractSetValues(sql string) (keyValues map[SetKey]interface{}, scope strin
 		case *Default:
 			result[setKey] = "default"
 		default:
-			return nil, "", fmt.Errorf("invalid syntax: %s", String(expr))
+			return nil, "", fmt.Errorf("invalid syntax: %s", String(expr, false))
 		}
 	}
 	return result, strings.ToLower(setStmt.Scope), nil
