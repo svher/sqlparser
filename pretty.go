@@ -13,7 +13,7 @@ func PrettyFormatter(buf *TrackedBuffer, node SQLNode) {
 
 	switch node := node.(type) {
 	case *Select:
-		node.formatPretty(buf)
+		prettyFormatSelect(buf, node)
 	case *Where:
 		prettyFormatWhere(buf, node)
 	case GroupBy:
@@ -27,29 +27,29 @@ func PrettyFormatter(buf *TrackedBuffer, node SQLNode) {
 	}
 }
 
-func (node *Select) formatPretty(buf *TrackedBuffer) {
-	var b strings.Builder
+func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
+	if node == nil {
+		return
+	}
 
 	if len(node.Comments) > 0 {
 		comments := strings.TrimSpace(String(node.Comments, false))
 		if comments != "" {
-			b.WriteString(comments)
-			b.WriteByte('\n')
+			buf.WriteString(comments)
+			buf.WriteByte('\n')
 		}
 	}
 
-	b.WriteString("select")
-
-	selectPrefixLen := len("select")
-
+	buf.WriteString("select")
+	prefixLen := len("select")
 	appendClause := func(value string) {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {
 			return
 		}
-		b.WriteByte(' ')
-		b.WriteString(trimmed)
-		selectPrefixLen += 1 + len(trimmed)
+		buf.WriteByte(' ')
+		buf.WriteString(trimmed)
+		prefixLen += 1 + len(trimmed)
 	}
 
 	appendClause(node.Cache)
@@ -57,83 +57,58 @@ func (node *Select) formatPretty(buf *TrackedBuffer) {
 	appendClause(node.Hints)
 
 	if len(node.SelectExprs) > 0 {
-		indent := strings.Repeat(" ", selectPrefixLen+1)
-		b.WriteByte(' ')
+		indent := strings.Repeat(" ", prefixLen+1)
+		buf.WriteByte(' ')
 		for i, expr := range node.SelectExprs {
 			if i > 0 {
-				b.WriteString(",\n")
-				b.WriteString(indent)
+				buf.WriteString(",\n")
+				buf.WriteString(indent)
 			}
-			b.WriteString(String(expr, false))
+			buf.Myprintf("%v", expr)
 		}
 	}
 
 	if len(node.From) > 0 {
-		b.WriteString("\nfrom ")
+		buf.WriteString("\nfrom ")
 		for i, table := range node.From {
 			if i > 0 {
-				b.WriteString(", ")
+				buf.WriteString(", ")
 			}
 			if pretty, ok := prettyTableExpr(table); ok {
-				b.WriteString(pretty)
+				buf.WriteString(pretty)
 				continue
 			}
-			b.WriteString(String(table, false))
+			buf.Myprintf("%v", table)
 		}
 	}
 
 	if node.Where != nil && node.Where.Expr != nil {
-		b.WriteByte('\n')
-		b.WriteString(node.Where.Type)
-		b.WriteByte(' ')
-		b.WriteString(String(node.Where.Expr, false))
+		prettyFormatWhere(buf, node.Where)
 	}
 
 	if len(node.GroupBy) > 0 {
-		b.WriteString("\ngroup by ")
-		for i, expr := range node.GroupBy {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(String(expr, false))
-		}
+		prettyFormatGroupBy(buf, node.GroupBy)
 	}
 
 	if node.Having != nil && node.Having.Expr != nil {
-		b.WriteByte('\n')
-		b.WriteString(node.Having.Type)
-		b.WriteByte(' ')
-		b.WriteString(String(node.Having.Expr, false))
+		prettyFormatWhere(buf, node.Having)
 	}
 
 	if len(node.OrderBy) > 0 {
-		b.WriteString("\norder by ")
-		for i, order := range node.OrderBy {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(String(order, false))
-		}
+		prettyFormatOrderBy(buf, node.OrderBy)
 	}
 
 	if node.Limit != nil {
-		b.WriteString("\nlimit ")
-		if node.Limit.Offset != nil {
-			b.WriteString(String(node.Limit.Offset, false))
-			b.WriteString(", ")
-		}
-		b.WriteString(String(node.Limit.Rowcount, false))
+		prettyFormatLimit(buf, node.Limit)
 	}
 
 	if node.Lock != "" {
 		lock := strings.TrimSpace(node.Lock)
 		if lock != "" {
-			b.WriteByte('\n')
-			b.WriteString(lock)
+			buf.WriteByte('\n')
+			buf.WriteString(lock)
 		}
 	}
-
-	buf.WriteString(b.String())
 }
 
 func prettyFormatWhere(buf *TrackedBuffer, node *Where) {
