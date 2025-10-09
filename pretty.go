@@ -94,14 +94,29 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 }
 
 func prettyFormatClause(buf *TrackedBuffer, node SQLNode) {
-	clause := formatClause(node)
-	if clause == "" {
+	if node == nil {
 		return
 	}
-	if buf.Len() > 0 {
+	origLen := buf.Len()
+	if origLen > 0 {
 		buf.WriteByte('\n')
 	}
-	buf.WriteString(clause)
+	clauseStart := buf.Len()
+	origFormatter := buf.nodeFormatter
+	buf.nodeFormatter = nil
+	node.Format(buf)
+	buf.nodeFormatter = origFormatter
+	if buf.Len() == clauseStart {
+		if origLen > 0 {
+			buf.Truncate(origLen)
+		}
+		return
+	}
+	data := buf.Bytes()
+	if clauseStart < len(data) && data[clauseStart] == ' ' {
+		copy(data[clauseStart:], data[clauseStart+1:])
+		buf.Truncate(len(data) - 1)
+	}
 }
 
 func prettyFormatAliasedTableExpr(buf *TrackedBuffer, node *AliasedTableExpr) {
@@ -141,14 +156,4 @@ func indentLines(s, indent string) string {
 		lines[i] = indent + line
 	}
 	return strings.Join(lines, "\n")
-}
-
-func formatClause(node SQLNode) string {
-	if node == nil {
-		return ""
-	}
-	buf := NewTrackedBuffer(nil)
-	node.Format(buf)
-	clause := buf.String()
-	return strings.TrimPrefix(clause, " ")
 }
