@@ -1,6 +1,10 @@
 package sqlparser
 
-import "strings"
+import (
+	"strings"
+)
+
+const clauseAlignColumn = len("select") + 1
 
 // PrettyFormatter is a NodeFormatter implementation that produces a
 // human-friendly, multi-line rendering of SQL nodes when pretty output is
@@ -69,7 +73,8 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 
 	if len(node.From) > 0 {
 		ensureClauseNewline(buf)
-		buf.Myprintf("from %v", node.From)
+		writeAlignedClauseKeyword(buf, "from")
+		buf.Myprintf("%v", node.From)
 	}
 
 	if node.Where != nil && node.Where.Expr != nil {
@@ -120,8 +125,19 @@ func prettyFormatWhereClause(buf *TrackedBuffer, node *Where) {
 }
 
 func prettyFormatLogicalClause(buf *TrackedBuffer, keyword string, expr Expr) {
-	buf.WriteString(keyword)
-	buf.WriteByte(' ')
+	if buf == nil {
+		return
+	}
+
+	indent := writeAlignedClauseKeyword(buf, keyword)
+
+	prettyFormatBooleanExpr(buf, expr, indent)
+}
+
+func prettyFormatBooleanExpr(buf *TrackedBuffer, expr Expr, indent int) {
+	if buf == nil {
+		return
+	}
 
 	op, terms := flattenBooleanExpr(expr)
 	if op == "" || len(terms) <= 1 {
@@ -129,11 +145,11 @@ func prettyFormatLogicalClause(buf *TrackedBuffer, keyword string, expr Expr) {
 		return
 	}
 
-	buf.Myprintf("%v", terms[0])
-	exprIndent := len(keyword) + 1
-	padding := exprIndent - (len(op) + 1)
-	if padding < 1 {
-		padding = 1
+	prettyFormatBooleanExpr(buf, terms[0], indent)
+
+	padding := indent - (len(op) + 1)
+	if padding < 0 {
+		padding = 0
 	}
 	pad := strings.Repeat(" ", padding)
 
@@ -142,7 +158,7 @@ func prettyFormatLogicalClause(buf *TrackedBuffer, keyword string, expr Expr) {
 		buf.WriteString(op)
 		buf.WriteByte(' ')
 		buf.WriteString(pad)
-		buf.Myprintf("%v", term)
+		prettyFormatBooleanExpr(buf, term, indent)
 	}
 }
 
@@ -258,4 +274,26 @@ func indentLines(s, indent string) string {
 		lines[i] = indent + line
 	}
 	return strings.Join(lines, "\n")
+}
+
+func writeAlignedClauseKeyword(buf *TrackedBuffer, keyword string) int {
+	if buf == nil {
+		return 0
+	}
+
+	buf.WriteString(keyword)
+
+	spaces := 1
+	if !strings.Contains(keyword, " ") {
+		spaces = clauseAlignColumn - len(keyword)
+		if spaces < 1 {
+			spaces = 1
+		}
+	}
+
+	if spaces > 0 {
+		buf.WriteString(strings.Repeat(" ", spaces))
+	}
+
+	return len(keyword) + spaces
 }

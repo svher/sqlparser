@@ -115,13 +115,13 @@ func TestPrettyFormatterClauses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := String(stmt, true), "update foo set bar = 1\nwhere baz = 2\norder by bar desc\nlimit 5"; got != want {
+	if got, want := String(stmt, true), "update foo set bar = 1\nwhere  baz = 2\norder by bar desc\nlimit 5"; got != want {
 		t.Errorf("pretty string:\n%s\nwant:\n%s", got, want)
 	}
 
 	buf := NewTrackedBuffer(PrettyFormatter)
 	buf.Myprintf("%v", stmt)
-	if got, want := buf.String(), "update foo set bar = 1\nwhere baz = 2\norder by bar desc\nlimit 5"; got != want {
+	if got, want := buf.String(), "update foo set bar = 1\nwhere  baz = 2\norder by bar desc\nlimit 5"; got != want {
 		t.Errorf("pretty tracked buffer:\n%s\nwant:\n%s", got, want)
 	}
 }
@@ -131,7 +131,7 @@ func TestPrettyFormatterSelect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "/*comment*/\nselect sql_cache distinct straight_join a,\n                                        b\nfrom t1 join (\n\tselect id\n\tfrom t2\n) as sub on t1.id = sub.id\nwhere a = 1\ngroup by b,\n         c\nhaving count(*) > 1\norder by d desc,\n         e asc\nlimit 2, 5\nlock in share mode"
+	const want = "/*comment*/\nselect sql_cache distinct straight_join a,\n                                        b\nfrom   t1 join (\n\tselect id\n\tfrom   t2\n) as sub on t1.id = sub.id\nwhere  a = 1\ngroup by b,\n         c\nhaving count(*) > 1\norder by d desc,\n         e asc\nlimit 2, 5\nlock in share mode"
 	if got := String(stmt, true); got != want {
 		t.Errorf("pretty select:\n%s\nwant:\n%s", got, want)
 	}
@@ -142,7 +142,7 @@ func TestPrettyFormatterWhereAlignment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := String(stmt, true), "select *\nfrom t\nwhere a = b\nand   1 = 1"; got != want {
+	if got, want := String(stmt, true), "select *\nfrom   t\nwhere  a = b\nand    1 = 1"; got != want {
 		t.Errorf("pretty select with and:\n%s\nwant:\n%s", got, want)
 	}
 
@@ -150,8 +150,36 @@ func TestPrettyFormatterWhereAlignment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := String(stmt, true), "select *\nfrom t\nwhere a = b\nor    c = d"; got != want {
+	if got, want := String(stmt, true), "select *\nfrom   t\nwhere  a = b\nor     c = d"; got != want {
 		t.Errorf("pretty select with or:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestPrettyFormatterWhereMixedBooleanAlignment(t *testing.T) {
+	query := "select * from t where `date` = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 = 2 and 3 = 3)"
+	stmt, err := Parse(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const want = "select *\nfrom   t\nwhere  `date` = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet')\nand    1 = 1\nor     (2 = 2 and 3 = 3)"
+	if got := String(stmt, true); got != want {
+		t.Errorf("pretty select with mixed boolean expressions:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestPrettyFormatterLogicalClauseAlignmentWithShortKeyword(t *testing.T) {
+	stmt, err := Parse("select * from t where a = b and c = d")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sel := stmt.(*Select)
+	sel.Where.Type = "on"
+
+	const want = "select *\nfrom   t\non     a = b\nand    c = d"
+	if got := String(sel, true); got != want {
+		t.Errorf("pretty select with short keyword alignment:\n%s\nwant:\n%s", got, want)
 	}
 }
 
