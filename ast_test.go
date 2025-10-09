@@ -126,6 +126,17 @@ func TestPrettyFormatterClauses(t *testing.T) {
 	}
 }
 
+func TestPrettyFormatterSelect(t *testing.T) {
+	stmt, err := Parse("select /*comment*/ sql_cache distinct straight_join a, b from t1 join (select id from t2) as sub on t1.id = sub.id where a = 1 group by b, c having count(*) > 1 order by d desc, e asc limit 5 offset 2 lock in share mode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "/*comment*/\nselect sql_cache distinct straight_join a,\n                                        b\nfrom t1 join (select id\nfrom t2) as sub on t1.id = sub.id\nwhere a = 1\ngroup by b, c\nhaving count(*) > 1\norder by d desc, e asc\nlimit 2, 5\nlock in share mode"
+	if got := String(stmt, true); got != want {
+		t.Errorf("pretty select:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestRemoveHints(t *testing.T) {
 	for _, query := range []string{
 		"select * from t use index (i)",

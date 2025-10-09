@@ -39,30 +39,80 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 		}
 	}
 
-	buf.Myprintf("select %s%s%s%v", node.Cache, node.Distinct, node.Hints, node.SelectExprs)
+	buf.WriteString("select")
+	prefixLen := len("select")
+	appendClause := func(value string) {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return
+		}
+		buf.Myprintf(" %s", trimmed)
+		prefixLen += 1 + len(trimmed)
+	}
+
+	appendClause(node.Cache)
+	appendClause(node.Distinct)
+	appendClause(node.Hints)
+
+	if len(node.SelectExprs) > 0 {
+		indent := strings.Repeat(" ", prefixLen+1)
+		buf.WriteByte(' ')
+		for i, expr := range node.SelectExprs {
+			if i > 0 {
+				buf.Myprintf(",\n%s", indent)
+			}
+			buf.Myprintf("%v", expr)
+		}
+	}
 
 	if len(node.From) > 0 {
-		buf.Myprintf("\nfrom %v", node.From)
+		buf.WriteString("\nfrom ")
+		for i, table := range node.From {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			if pretty, ok := prettyTableExpr(table); ok {
+				buf.WriteString(pretty)
+				continue
+			}
+			buf.Myprintf("%v", table)
+		}
 	}
 
 	if node.Where != nil && node.Where.Expr != nil {
-		prettyFormatWhere(buf, node.Where)
+		buf.Myprintf("\n%s %v", node.Where.Type, node.Where.Expr)
 	}
 
 	if len(node.GroupBy) > 0 {
-		prettyFormatGroupBy(buf, node.GroupBy)
+		buf.WriteString("\ngroup by ")
+		for i, expr := range node.GroupBy {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.Myprintf("%v", expr)
+		}
 	}
 
 	if node.Having != nil && node.Having.Expr != nil {
-		prettyFormatWhere(buf, node.Having)
+		buf.Myprintf("\n%s %v", node.Having.Type, node.Having.Expr)
 	}
 
 	if len(node.OrderBy) > 0 {
-		prettyFormatOrderBy(buf, node.OrderBy)
+		buf.WriteString("\norder by ")
+		for i, expr := range node.OrderBy {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.Myprintf("%v", expr)
+		}
 	}
 
 	if node.Limit != nil {
-		prettyFormatLimit(buf, node.Limit)
+		buf.WriteString("\nlimit ")
+		if node.Limit.Offset != nil {
+			buf.Myprintf("%v, ", node.Limit.Offset)
+		}
+		buf.Myprintf("%v", node.Limit.Rowcount)
 	}
 
 	if node.Lock != "" {
