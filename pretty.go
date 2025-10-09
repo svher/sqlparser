@@ -23,7 +23,7 @@ func PrettyFormatter(buf *TrackedBuffer, node SQLNode) {
 	case *Limit:
 		prettyFormatLimit(buf, node)
 	default:
-		node.Format(buf, true)
+		node.Format(buf)
 	}
 }
 

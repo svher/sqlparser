@@ -111,7 +111,7 @@ func (buf *TrackedBuffer) formatNode(node SQLNode) {
 		return
 	}
 	if buf.nodeFormatter == nil {
-		node.Format(buf, false)
+		node.Format(buf)
 		return
 	}
 	buf.nodeFormatter(buf, node)
