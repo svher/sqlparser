@@ -16,6 +16,23 @@ func PrettyFormatter(buf *TrackedBuffer, node SQLNode) {
 	}
 
 	switch node := node.(type) {
+	case *With:
+		buf.Myprintf("with %v\n%v", node.CTEs, node.Stmt)
+	case *CommonTableExpr:
+		buf.Myprintf("%v%v as %v", node.Name, node.Columns, node.Subquery)
+	case *JoinTableExpr:
+		buf.Myprintf("%v\n", node.LeftExpr)
+		writeAlignedClauseKeyword(buf, node.Join)
+		buf.Myprintf("%v\n%v", node.RightExpr, node.Condition)
+	case JoinCondition:
+		if node.On != nil {
+			writeAlignedClauseKeyword(buf, "on")
+			buf.Myprintf("%v", node.On)
+		}
+		if node.Using != nil {
+			writeAlignedClauseKeyword(buf, "using")
+			buf.Myprintf("%v", node.Using)
+		}
 	case *Select:
 		prettyFormatSelect(buf, node)
 	case *Where:

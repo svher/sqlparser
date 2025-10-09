@@ -1620,7 +1620,7 @@ func (node CommonTableExprs) walkSubtree(visit Visit) error {
 type CommonTableExpr struct {
 	Name     TableIdent
 	Columns  Columns
-	Subquery SelectStatement
+	Subquery *Subquery
 }
 
 // Format formats the node.
@@ -1628,7 +1628,7 @@ func (node *CommonTableExpr) Format(buf *TrackedBuffer) {
 	if node == nil {
 		return
 	}
-	buf.Myprintf("%v%v as (%v)", node.Name, node.Columns, node.Subquery)
+	buf.Myprintf("%v%v as %v", node.Name, node.Columns, node.Subquery)
 }
 
 func (node *CommonTableExpr) walkSubtree(visit Visit) error {

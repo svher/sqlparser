@@ -400,9 +400,9 @@ common_table_expr_list:
   }
 
 common_table_expr:
-  table_id cte_column_list_opt AS openb select_statement closeb
+  table_id cte_column_list_opt AS subquery
   {
-    $$ = &CommonTableExpr{Name: $1, Columns: $2, Subquery: $5}
+    $$ = &CommonTableExpr{Name: $1, Columns: $2, Subquery: $4}
   }
 
 cte_column_list_opt:
@@ -3178,7 +3178,6 @@ non_reserved_keyword:
 | VITESS_SHARDS
 | VITESS_TABLETS
 | VSCHEMA_TABLES
-| WITH
 | WRITE
 | YEAR
 | ZEROFILL
