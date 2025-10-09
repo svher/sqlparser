@@ -209,12 +209,16 @@ func (node *Select) formatPretty(buf *TrackedBuffer) {
 
 	b.WriteString("select")
 
+	selectPrefixLen := len("select")
+
 	appendClause := func(value string) {
-		if strings.TrimSpace(value) == "" {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
 			return
 		}
 		b.WriteByte(' ')
-		b.WriteString(strings.TrimSpace(value))
+		b.WriteString(trimmed)
+		selectPrefixLen += 1 + len(trimmed)
 	}
 
 	appendClause(node.Cache)
@@ -222,13 +226,13 @@ func (node *Select) formatPretty(buf *TrackedBuffer) {
 	appendClause(node.Hints)
 
 	if len(node.SelectExprs) > 0 {
-		b.WriteByte('\n')
-		indent := "  "
+		indent := strings.Repeat(" ", selectPrefixLen+1)
+		b.WriteByte(' ')
 		for i, expr := range node.SelectExprs {
 			if i > 0 {
 				b.WriteString(",\n")
+				b.WriteString(indent)
 			}
-			b.WriteString(indent)
 			b.WriteString(String(expr, false))
 		}
 	}
