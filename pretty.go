@@ -35,51 +35,14 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 	if len(node.Comments) > 0 {
 		comments := strings.TrimSpace(String(node.Comments, false))
 		if comments != "" {
-			buf.WriteString(comments)
-			buf.WriteByte('\n')
+			buf.Myprintf("%s\n", comments)
 		}
 	}
 
-	buf.WriteString("select")
-	prefixLen := len("select")
-	appendClause := func(value string) {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			return
-		}
-		buf.WriteByte(' ')
-		buf.WriteString(trimmed)
-		prefixLen += 1 + len(trimmed)
-	}
-
-	appendClause(node.Cache)
-	appendClause(node.Distinct)
-	appendClause(node.Hints)
-
-	if len(node.SelectExprs) > 0 {
-		indent := strings.Repeat(" ", prefixLen+1)
-		buf.WriteByte(' ')
-		for i, expr := range node.SelectExprs {
-			if i > 0 {
-				buf.WriteString(",\n")
-				buf.WriteString(indent)
-			}
-			buf.Myprintf("%v", expr)
-		}
-	}
+	buf.Myprintf("select %s%s%s%v", node.Cache, node.Distinct, node.Hints, node.SelectExprs)
 
 	if len(node.From) > 0 {
-		buf.WriteString("\nfrom ")
-		for i, table := range node.From {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			if pretty, ok := prettyTableExpr(table); ok {
-				buf.WriteString(pretty)
-				continue
-			}
-			buf.Myprintf("%v", table)
-		}
+		buf.Myprintf("\nfrom %v", node.From)
 	}
 
 	if node.Where != nil && node.Where.Expr != nil {
@@ -105,8 +68,7 @@ func prettyFormatSelect(buf *TrackedBuffer, node *Select) {
 	if node.Lock != "" {
 		lock := strings.TrimSpace(node.Lock)
 		if lock != "" {
-			buf.WriteByte('\n')
-			buf.WriteString(lock)
+			buf.Myprintf("\n%s", lock)
 		}
 	}
 }
