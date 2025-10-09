@@ -123,15 +123,23 @@ func prettyFormatLogicalClause(buf *TrackedBuffer, keyword string, expr Expr) {
 	buf.WriteString(keyword)
 	buf.WriteByte(' ')
 
+	prettyFormatBooleanExpr(buf, expr, len(keyword)+1)
+}
+
+func prettyFormatBooleanExpr(buf *TrackedBuffer, expr Expr, indent int) {
+	if buf == nil {
+		return
+	}
+
 	op, terms := flattenBooleanExpr(expr)
 	if op == "" || len(terms) <= 1 {
 		buf.Myprintf("%v", expr)
 		return
 	}
 
-	buf.Myprintf("%v", terms[0])
-	exprIndent := len(keyword) + 1
-	padding := exprIndent - (len(op) + 1)
+	prettyFormatBooleanExpr(buf, terms[0], indent)
+
+	padding := indent - (len(op) + 1)
 	if padding < 1 {
 		padding = 1
 	}
@@ -142,7 +150,7 @@ func prettyFormatLogicalClause(buf *TrackedBuffer, keyword string, expr Expr) {
 		buf.WriteString(op)
 		buf.WriteByte(' ')
 		buf.WriteString(pad)
-		buf.Myprintf("%v", term)
+		prettyFormatBooleanExpr(buf, term, indent)
 	}
 }
 
