@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func RewriteSqls(sql string) (string, error) {
+func RewriteSqls(sql string, pretty bool) (string, error) {
 	tokenizer := NewStringTokenizer(sql)
 	var rewritten []string
 	for {
@@ -27,10 +27,10 @@ func RewriteSqls(sql string) (string, error) {
 		if err := rewriteSql(selectStmt); err != nil {
 			return "", err
 		}
-		rewritten = append(rewritten, String(selectStmt, true))
+		rewritten = append(rewritten, String(selectStmt, pretty))
 	}
 
-	return strings.Join(rewritten, ";\n"), nil
+	return strings.Join(rewritten, ";\n\n"), nil
 }
 
 func rewriteSql(sel *Select) error {
