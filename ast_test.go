@@ -131,9 +131,27 @@ func TestPrettyFormatterSelect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-    const want = "/*comment*/\nselect sql_cache distinct straight_join a,\n                                        b\nfrom t1 join (\n\tselect id\n\tfrom t2\n) as sub on t1.id = sub.id\nwhere a = 1\ngroup by b, c\nhaving count(*) > 1\norder by d desc, e asc\nlimit 2, 5\nlock in share mode"
+	const want = "/*comment*/\nselect sql_cache distinct straight_join a,\n                                        b\nfrom t1 join (\n\tselect id\n\tfrom t2\n) as sub on t1.id = sub.id\nwhere a = 1\ngroup by b,\n         c\nhaving count(*) > 1\norder by d desc,\n         e asc\nlimit 2, 5\nlock in share mode"
 	if got := String(stmt, true); got != want {
 		t.Errorf("pretty select:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestPrettyFormatterWhereAlignment(t *testing.T) {
+	stmt, err := Parse("select * from t where a = b and 1 = 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := String(stmt, true), "select *\nfrom t\nwhere a = b\nand   1 = 1"; got != want {
+		t.Errorf("pretty select with and:\n%s\nwant:\n%s", got, want)
+	}
+
+	stmt, err = Parse("select * from t where a = b or c = d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := String(stmt, true), "select *\nfrom t\nwhere a = b\nor    c = d"; got != want {
+		t.Errorf("pretty select with or:\n%s\nwant:\n%s", got, want)
 	}
 }
 
