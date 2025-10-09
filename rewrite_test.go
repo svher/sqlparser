@@ -2,36 +2,8 @@ package sqlparser
 
 import "testing"
 
-func TestRewriteShopAuthorEdgeQueries(t *testing.T) {
-	rewritten, err := rewriteSqls(`SELECT  DISTINCT point1_id,
-        point2_id,
-        point1_type,
-        point2_type,
-        value,
-        ts_us,
-        edge_type,
-        cast(order_rate_weight as float)
-FROM    (
-        SELECT  src AS point2_id,
-                tgt AS point1_id,
-                'shop' AS point2_type,
-                'author' AS point1_type,
-                '' AS value,
-                (UNIX_TIMESTAMP() * 1000000) AS ts_us,
-                'author_shop' AS edge_type,
-                ratio_src AS order_rate_weight
-        FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
-        WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
-        and edge_type = 'shop_sell_author_1d'
-        ) a`)
-	if err != nil {
-		t.Fatalf("rewriteSqls error: %v", err)
-	}
-	t.Log(rewritten)
-}
-
-func TestRewritePointEdgeMultiStatement(t *testing.T) {
-	rewritten, err := rewriteSqls(`SELECT  DISTINCT point1_id,
+func TestRewriteEdgeSqls(t *testing.T) {
+	rewritten, err := RewriteSqls(`SELECT  DISTINCT point1_id,
         point2_id,
         point1_type,
         point2_type,
@@ -75,13 +47,13 @@ FROM    (
         AND     edge_type = 'author_sell_sim_1d'
         ) a;`)
 	if err != nil {
-		t.Fatalf("rewriteSqls error: %v", err)
+		t.Fatalf("RewriteSqls error: %v", err)
 	}
 	t.Log(rewritten)
 }
 
-func TestRewritePointStatementHelper(t *testing.T) {
-	rewritten, err := rewriteSqls(`SELECT
+func TestRewritePointSql(t *testing.T) {
+	rewritten, err := RewriteSqls(`SELECT
   sim_id as point_id,
   'sim' as point_type,
   sim_id as point_value,
@@ -173,7 +145,7 @@ FROM
 WHERE
   date = max_pt('dm_temai.sim_product_feature_aggregation_new_df')`)
 	if err != nil {
-		t.Fatalf("rewriteSqls error: %v", err)
+		t.Fatalf("RewriteSqls error: %v", err)
 	}
 	t.Log(rewritten)
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func rewriteSqls(sql string) (string, error) {
+func RewriteSqls(sql string) (string, error) {
 	tokenizer := NewStringTokenizer(sql)
 	var rewritten []string
 	for {
