@@ -336,6 +336,7 @@ var keywords = map[string]int{
 	"start":               START,
 	"starting":            UNUSED,
 	"status":              STATUS,
+	"string":              STRINGKW,
 	"stored":              UNUSED,
 	"straight_join":       STRAIGHT_JOIN,
 	"stream":              STREAM,

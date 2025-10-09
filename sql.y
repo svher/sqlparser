@@ -124,7 +124,7 @@ func forceEOF(yylex interface{}) {
 %left <bytes> JOIN STRAIGHT_JOIN LEFT RIGHT INNER OUTER CROSS NATURAL USE FORCE
 %left <bytes> ON USING
 %token <empty> '(' ',' ')'
-%token <bytes> ID HEX STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
+%token <bytes> ID HEX STRING STRINGKW INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
 %token <bytes> NULL TRUE FALSE
 
 // Precedence dictated by mysql. But the vitess grammar is simplified.
@@ -2499,6 +2499,10 @@ convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
+| STRINGKW
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
 | ID
   {
     $$ = &ConvertType{Type: string($1)}
@@ -3139,6 +3143,7 @@ non_reserved_keyword:
 | SHARE
 | SIGNED
 | SMALLINT
+| STRINGKW
 | SPATIAL
 | START
 | STATUS
