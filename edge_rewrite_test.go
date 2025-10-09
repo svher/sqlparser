@@ -152,16 +152,20 @@ func rewritePointEdgeSelect(t testing.TB, sel *Select) {
 		}
 
 		name := aliasOrColumnName(aliased)
-		switch {
-		case name == "edge_type":
+		switch name {
+		case "edge_type":
 			aliased.As = NewColIdent("label")
 			selectExprs = append(selectExprs, aliased)
-		case name == "order_rate_weight" || String(aliased.Expr) == "convert(order_rate_weight, float)":
-			aliased.As = NewColIdent("order_rate_weight")
-			selectExprs = append(selectExprs, aliased)
-		default:
-			selectExprs = append(selectExprs, aliased)
+			continue
 		}
+
+		if aliased.As.IsEmpty() {
+			if derived := deriveAliasFromExpr(aliased.Expr); derived != "" {
+				aliased.As = NewColIdent(derived)
+			}
+		}
+
+		selectExprs = append(selectExprs, aliased)
 	}
 
 	sel.SelectExprs = selectExprs
@@ -187,6 +191,20 @@ func newAliasedExprFromString(t testing.TB, expr, alias string) *AliasedExpr {
 		Expr: parsedExpr,
 		As:   NewColIdent(alias),
 	}
+}
+
+func deriveAliasFromExpr(expr Expr) string {
+	switch e := expr.(type) {
+	case *ColName:
+		if e.Qualifier.IsEmpty() {
+			return e.Name.Lowered()
+		}
+	case *ConvertExpr:
+		return deriveAliasFromExpr(e.Expr)
+	case *ParenExpr:
+		return deriveAliasFromExpr(e.Expr)
+	}
+	return ""
 }
 
 func mustParseExpr(t testing.TB, expr string) Expr {
