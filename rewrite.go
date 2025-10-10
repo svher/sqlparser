@@ -31,10 +31,15 @@ func RewriteSqls(sql string, pretty bool) (string, error) {
 		if err := rewriteSql(selectStmt); err != nil {
 			return "", err
 		}
-		rewritten = append(rewritten, String(stmt, pretty))
+		rewritten = append(rewritten, String(stmt, pretty)+";")
 	}
 
-	return strings.Join(rewritten, ";\n\n"), nil
+	sep := " "
+	if pretty {
+		sep = "\n\n"
+	}
+	res := strings.Join(rewritten, sep)
+	return strings.Replace(res, "'", "\"", -1), nil
 }
 
 func rewriteSql(sel *Select) error {
