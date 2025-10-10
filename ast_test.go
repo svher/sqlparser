@@ -363,7 +363,7 @@ func TestReplaceExpr(t *testing.T) {
 			t.Fatalf("from is nil for %s", tcase.in)
 		}
 		expr := ReplaceExpr(tree.(*Select).Where.Expr, from, to)
-		got := String(expr)
+		got := String(expr, false)
 		if tcase.out != got {
 			t.Errorf("ReplaceExpr(%s): %s, want %s", tcase.in, got, tcase.out)
 		}
