@@ -15,5 +15,5 @@ func RedactSQLQuery(sql string) (string, error) {
 	prefix := "redacted"
 	Normalize(stmt, bv, prefix)
 
-	return comments.Leading + String(stmt) + comments.Trailing, nil
+	return comments.Leading + String(stmt, false) + comments.Trailing, nil
 }

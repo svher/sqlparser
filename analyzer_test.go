@@ -325,16 +325,16 @@ func TestNewPlanValue(t *testing.T) {
 		got, err := NewPlanValue(tc.in)
 		if err != nil {
 			if !strings.Contains(err.Error(), tc.err) {
-				t.Errorf("NewPlanValue(%s) error: %v, want '%s'", String(tc.in), err, tc.err)
+				t.Errorf("NewPlanValue(%s) error: %v, want '%s'", String(tc.in, false), err, tc.err)
 			}
 			continue
 		}
 		if tc.err != "" {
-			t.Errorf("NewPlanValue(%s) error: nil, want '%s'", String(tc.in), tc.err)
+			t.Errorf("NewPlanValue(%s) error: nil, want '%s'", String(tc.in, false), tc.err)
 			continue
 		}
 		if !reflect.DeepEqual(got, tc.out) {
-			t.Errorf("NewPlanValue(%s): %v, want %v", String(tc.in), got, tc.out)
+			t.Errorf("NewPlanValue(%s): %v, want %v", String(tc.in, false), got, tc.out)
 		}
 	}
 }

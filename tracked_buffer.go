@@ -95,6 +95,9 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 			}
 		case 'v':
 			node := values[fieldnum].(SQLNode)
+			if node == nil {
+				break
+			}
 			if buf.nodeFormatter == nil {
 				node.Format(buf)
 			} else {
