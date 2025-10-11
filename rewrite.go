@@ -6,16 +6,16 @@ import (
 	"strings"
 )
 
-func RewriteSqls(sql string, pretty bool) (string, error) {
+func RewriteSqls(sql string, pretty bool) (map[string]string, error) {
 	tokenizer := NewStringTokenizer(sql)
-	var rewritten []string
+	rewritten := make(map[string]string)
 	for {
 		stmt, err := ParseNext(tokenizer)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return "", fmt.Errorf("ParseNext error: %w", err)
+			return nil, fmt.Errorf("ParseNext error: %w", err)
 		}
 		if stmt == nil {
 			continue
@@ -26,38 +26,41 @@ func RewriteSqls(sql string, pretty bool) (string, error) {
 		}
 		selectStmt, ok := unwrapped.(*Select)
 		if !ok {
-			return "", fmt.Errorf("unexpected statement type %T", stmt)
+			return nil, fmt.Errorf("unexpected statement type %T", stmt)
 		}
-		if err := rewriteSql(selectStmt); err != nil {
-			return "", err
+		key, err := rewriteSql(selectStmt)
+		if err != nil {
+			return nil, err
 		}
-		rewritten = append(rewritten, String(stmt, pretty)+";")
+		rendered := strings.Replace(String(stmt, pretty)+";", "'", "\"", -1)
+		if existing, ok := rewritten[key]; ok {
+			rewritten[key] = existing + "\n" + rendered
+		} else {
+			rewritten[key] = rendered
+		}
 	}
 
-	sep := " "
-	if pretty {
-		sep = "\n\n"
-	}
-	res := strings.Join(rewritten, sep)
-	return strings.Replace(res, "'", "\"", -1), nil
+	return rewritten, nil
 }
 
-func rewriteSql(sel *Select) error {
-	if rewritten, err := rewriteEdgeSql(sel); err != nil {
-		return err
+func rewriteSql(sel *Select) (string, error) {
+	if key, rewritten, err := rewriteEdgeSql(sel); err != nil {
+		return "", err
 	} else if rewritten {
-		return nil
+		return key, nil
 	}
-	if rewritten, err := rewritePointSql(sel); err != nil {
-		return err
+	if key, rewritten, err := rewritePointSql(sel); err != nil {
+		return "", err
 	} else if rewritten {
-		return nil
+		return key, nil
 	}
 
-	return fmt.Errorf("select does not contain recognizable point or edge columns")
+	return "", fmt.Errorf("select does not contain recognizable point or edge columns")
 }
 
-func rewriteEdgeSql(sel *Select) (bool, error) {
+func rewriteEdgeSql(sel *Select) (string, bool, error) {
+	edgeTypeLiteral, _ := findStringLiteralForAliasInSelect(sel, "edge_type")
+
 	var (
 		point1ID   *AliasedExpr
 		point2ID   *AliasedExpr
@@ -90,22 +93,22 @@ func rewriteEdgeSql(sel *Select) (bool, error) {
 	}
 
 	if point1ID == nil && point2ID == nil && point1Type == nil && point2Type == nil {
-		return false, nil
+		return "", false, nil
 	}
 
 	if point1ID == nil || point2ID == nil || point1Type == nil || point2Type == nil {
-		return false, fmt.Errorf("missing required columns: p1=%t p2=%t p1Type=%t p2Type=%t", point1ID != nil, point2ID != nil, point1Type != nil, point2Type != nil)
+		return "", false, fmt.Errorf("missing required columns: p1=%t p2=%t p1Type=%t p2Type=%t", point1ID != nil, point2ID != nil, point1Type != nil, point2Type != nil)
 	}
 
 	point1Expr, err := newAliasedExprFromString(fmt.Sprintf("named_struct('id', cast(%s as string))", String(point1ID.Expr, false)), "outv_pk_prop")
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	selectExprs := SelectExprs{point1Expr}
 
 	point2Expr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(point2ID.Expr, false)), "bg__id")
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	selectExprs = append(selectExprs, point2Expr)
 
@@ -126,6 +129,11 @@ func rewriteEdgeSql(sel *Select) (bool, error) {
 		switch name {
 		case "edge_type":
 			aliased.As = NewColIdent("label")
+			if edgeTypeLiteral == "" {
+				if literal, err := extractStringLiteral(aliased.Expr); err == nil {
+					edgeTypeLiteral = literal
+				}
+			}
 			selectExprs = append(selectExprs, aliased)
 			continue
 		}
@@ -140,14 +148,18 @@ func rewriteEdgeSql(sel *Select) (bool, error) {
 	}
 
 	sel.SelectExprs = selectExprs
-	return true, nil
+	if edgeTypeLiteral == "" {
+		return "", false, fmt.Errorf("edge sql missing literal edge_type column")
+	}
+	return edgeTypeLiteral, true, nil
 }
 
-func rewritePointSql(sel *Select) (bool, error) {
+func rewritePointSql(sel *Select) (string, bool, error) {
 	var (
-		pointID   *AliasedExpr
-		pointType *AliasedExpr
-		remaining SelectExprs
+		pointID          *AliasedExpr
+		pointType        *AliasedExpr
+		pointTypeLiteral string
+		remaining        SelectExprs
 	)
 
 	for _, expr := range sel.SelectExprs {
@@ -170,18 +182,29 @@ func rewritePointSql(sel *Select) (bool, error) {
 	}
 
 	if pointID == nil && pointType == nil {
-		return false, nil
+		return "", false, nil
 	}
 
 	if pointID == nil || pointType == nil {
-		return false, fmt.Errorf("missing required point columns: point_id=%t point_type=%t", pointID != nil, pointType != nil)
+		return "", false, fmt.Errorf("missing required point columns: point_id=%t point_type=%t", pointID != nil, pointType != nil)
+	}
+
+	literal, err := extractStringLiteral(pointType.Expr)
+	if err != nil {
+		if fallback, ok := findStringLiteralForAliasInSelect(sel, "point_type"); ok {
+			pointTypeLiteral = fallback
+		} else {
+			return "", false, err
+		}
+	} else {
+		pointTypeLiteral = literal
 	}
 
 	pointType.As = NewColIdent("label")
 
 	pointIDExpr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(pointID.Expr, false)), "id")
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	selectExprs := SelectExprs{pointType, pointIDExpr}
 
@@ -190,7 +213,65 @@ func rewritePointSql(sel *Select) (bool, error) {
 	}
 
 	sel.SelectExprs = selectExprs
-	return true, nil
+	return pointTypeLiteral, true, nil
+}
+
+func extractStringLiteral(expr Expr) (string, error) {
+	sqlVal, ok := expr.(*SQLVal)
+	if !ok || sqlVal.Type != StrVal {
+		return "", fmt.Errorf("expected string literal, got %T", expr)
+	}
+	return string(sqlVal.Val), nil
+}
+
+func findStringLiteralForAliasInSelect(sel *Select, alias string) (string, bool) {
+	for _, expr := range sel.SelectExprs {
+		aliased, ok := expr.(*AliasedExpr)
+		if !ok {
+			continue
+		}
+		if aliasOrColumnName(aliased) != alias {
+			continue
+		}
+		if literal, err := extractStringLiteral(aliased.Expr); err == nil {
+			return literal, true
+		}
+	}
+
+	for _, tableExpr := range sel.From {
+		if literal, ok := findStringLiteralForAliasInTableExpr(tableExpr, alias); ok {
+			return literal, true
+		}
+	}
+
+	return "", false
+}
+
+func findStringLiteralForAliasInTableExpr(tableExpr TableExpr, alias string) (string, bool) {
+	switch expr := tableExpr.(type) {
+	case *AliasedTableExpr:
+		if subquery, ok := expr.Expr.(*Subquery); ok {
+			if sel, ok := subquery.Select.(*Select); ok {
+				if literal, ok := findStringLiteralForAliasInSelect(sel, alias); ok {
+					return literal, true
+				}
+			}
+		}
+	case *ParenTableExpr:
+		for _, innerExpr := range expr.Exprs {
+			if literal, ok := findStringLiteralForAliasInTableExpr(innerExpr, alias); ok {
+				return literal, true
+			}
+		}
+	case *JoinTableExpr:
+		if literal, ok := findStringLiteralForAliasInTableExpr(expr.LeftExpr, alias); ok {
+			return literal, true
+		}
+		if literal, ok := findStringLiteralForAliasInTableExpr(expr.RightExpr, alias); ok {
+			return literal, true
+		}
+	}
+	return "", false
 }
 
 func aliasOrColumnName(ae *AliasedExpr) string {

@@ -1,6 +1,9 @@
 package sqlparser
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRewriteEdgeSqls(t *testing.T) {
 	rewritten, err := RewriteSqls(`SELECT  DISTINCT point1_id,
@@ -49,7 +52,28 @@ FROM    (
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
-	t.Log("\n" + rewritten)
+	if len(rewritten) != 2 {
+		t.Fatalf("expected 2 rewritten sqls, got %d", len(rewritten))
+	}
+
+	shopSim, ok := rewritten["shop_sim"]
+	if !ok {
+		t.Fatalf("expected key shop_sim in rewritten map: %#v", rewritten)
+	}
+	if !strings.Contains(shopSim, "named_struct(\"id\", cast(") || !strings.Contains(shopSim, "as outv_pk_prop") {
+		t.Fatalf("shop_sim sql missing outv_pk_prop expression: %s", shopSim)
+	}
+	if !strings.Contains(strings.ToLower(shopSim), " as label") {
+		t.Fatalf("shop_sim sql missing label alias: %s", shopSim)
+	}
+
+	simAuthor, ok := rewritten["sim_author"]
+	if !ok {
+		t.Fatalf("expected key sim_author in rewritten map: %#v", rewritten)
+	}
+	if !strings.Contains(strings.ToLower(simAuthor), " as bg__id") {
+		t.Fatalf("sim_author sql missing bg__id alias: %s", simAuthor)
+	}
 }
 
 func TestRewritePointSql(t *testing.T) {
@@ -128,5 +152,18 @@ WHERE
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
-	t.Log("\n" + rewritten)
+	if len(rewritten) != 1 {
+		t.Fatalf("expected 1 rewritten sql, got %d", len(rewritten))
+	}
+
+	groupSQL, ok := rewritten["group"]
+	if !ok {
+		t.Fatalf("expected key group in rewritten map: %#v", rewritten)
+	}
+	if !strings.Contains(strings.ToLower(groupSQL), " as label") {
+		t.Fatalf("group sql missing label alias: %s", groupSQL)
+	}
+	if !strings.Contains(strings.ToLower(groupSQL), " as id") {
+		t.Fatalf("group sql missing id alias: %s", groupSQL)
+	}
 }
