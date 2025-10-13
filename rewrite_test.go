@@ -8,7 +8,7 @@ import (
 func TestRewriteEdgeSqls(t *testing.T) {
 	typeMap := map[string]map[string]string{
 		"shop_sim": {
-			"order_rate_weight": "float",
+			"order_rate_weight": "double",
 		},
 		"sim_author": {
 			"order_rate_weight": "double",
@@ -22,7 +22,8 @@ func TestRewriteEdgeSqls(t *testing.T) {
         value,
         ts_us,
         edge_type,
-        cast(order_rate_weight as float)
+        cast(order_rate_weight as float),
+		low_score_author_cnt
 FROM    (
         SELECT  src AS point1_id,
                 tgt AS point2_id,
@@ -143,7 +144,11 @@ FROM
 join t
 on 1 = 1
 WHERE
-  date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 =2 and 3=3) group by d order by e`, false, nil)
+  date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 =2 and 3=3) group by d order by e`, false, map[string]map[string]string{
+		"group": {
+			"quality_ccr_cnt_60d": "float",
+		},
+	})
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}

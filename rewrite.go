@@ -136,8 +136,7 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 			continue
 		}
 
-		name := aliasOrColumnName(aliased)
-		switch name {
+		switch aliasOrColumnName(aliased) {
 		case "edge_type":
 			aliased.As = NewColIdent("label")
 			if edgeTypeLiteral == "" {
@@ -146,16 +145,9 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 				}
 			}
 			selectExprs = append(selectExprs, aliased)
-			continue
+		default:
+			selectExprs = append(selectExprs, aliased)
 		}
-
-		if aliased.As.IsEmpty() {
-			if derived := deriveAliasFromExpr(aliased.Expr); derived != "" {
-				aliased.As = NewColIdent(derived)
-			}
-		}
-
-		selectExprs = append(selectExprs, aliased)
 	}
 
 	sel.SelectExprs = selectExprs
@@ -336,10 +328,7 @@ func aliasOrColumnName(ae *AliasedExpr) string {
 	if !ae.As.IsEmpty() {
 		return ae.As.Lowered()
 	}
-	if col, ok := ae.Expr.(*ColName); ok && col.Qualifier.IsEmpty() {
-		return col.Name.Lowered()
-	}
-	return ""
+	return deriveAliasFromExpr(ae.Expr)
 }
 
 func newAliasedExprFromString(expr, alias string) (*AliasedExpr, error) {
