@@ -11,7 +11,7 @@ type SqlDef struct {
 	LabelType string `json:"label_type"`
 }
 
-func RewriteSqls(sql string, pretty bool) (map[string]*SqlDef, error) {
+func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) (map[string]*SqlDef, error) {
 	if len(strings.TrimSpace(sql)) == 0 {
 		return nil, nil
 	}
@@ -36,7 +36,7 @@ func RewriteSqls(sql string, pretty bool) (map[string]*SqlDef, error) {
 		if !ok {
 			return nil, fmt.Errorf("unexpected statement type %T", stmt)
 		}
-		key, err := rewriteSql(selectStmt)
+		key, err := rewriteSql(selectStmt, typeMap)
 		if err != nil {
 			return nil, err
 		}
@@ -54,13 +54,13 @@ func RewriteSqls(sql string, pretty bool) (map[string]*SqlDef, error) {
 	return rewritten, nil
 }
 
-func rewriteSql(sel *Select) (string, error) {
-	if key, rewritten, err := rewriteEdgeSql(sel); err != nil {
+func rewriteSql(sel *Select, typeMap map[string]map[string]string) (string, error) {
+	if key, rewritten, err := rewriteEdgeSql(sel, typeMap); err != nil {
 		return "", err
 	} else if rewritten {
 		return key, nil
 	}
-	if key, rewritten, err := rewritePointSql(sel); err != nil {
+	if key, rewritten, err := rewritePointSql(sel, typeMap); err != nil {
 		return "", err
 	} else if rewritten {
 		return key, nil
@@ -69,7 +69,7 @@ func rewriteSql(sel *Select) (string, error) {
 	return "", fmt.Errorf("select does not contain recognizable point or edge columns")
 }
 
-func rewriteEdgeSql(sel *Select) (string, bool, error) {
+func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, bool, error) {
 	edgeTypeLiteral, _ := findStringLiteralForAliasInSelect(sel, "edge_type")
 
 	var (
@@ -159,13 +159,20 @@ func rewriteEdgeSql(sel *Select) (string, bool, error) {
 	}
 
 	sel.SelectExprs = selectExprs
+	var columnTypes map[string]string
+	if edgeTypeLiteral != "" {
+		columnTypes = typeMap[edgeTypeLiteral]
+	}
+	if err := applyTypeAnnotations(sel.SelectExprs, columnTypes); err != nil {
+		return "", false, err
+	}
 	if edgeTypeLiteral == "" {
 		return "", false, fmt.Errorf("edge sql missing literal edge_type column")
 	}
 	return edgeTypeLiteral, true, nil
 }
 
-func rewritePointSql(sel *Select) (string, bool, error) {
+func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string, bool, error) {
 	var (
 		pointID          *AliasedExpr
 		pointType        *AliasedExpr
@@ -224,7 +231,45 @@ func rewritePointSql(sel *Select) (string, bool, error) {
 	}
 
 	sel.SelectExprs = selectExprs
+	var columnTypes map[string]string
+	if pointTypeLiteral != "" {
+		columnTypes = typeMap[pointTypeLiteral]
+	}
+	if err := applyTypeAnnotations(sel.SelectExprs, columnTypes); err != nil {
+		return "", false, err
+	}
 	return pointTypeLiteral, true, nil
+}
+
+func applyTypeAnnotations(selectExprs SelectExprs, typeMap map[string]string) error {
+	if len(typeMap) == 0 {
+		return nil
+	}
+	for _, expr := range selectExprs {
+		aliased, ok := expr.(*AliasedExpr)
+		if !ok {
+			continue
+		}
+
+		name := aliasOrColumnName(aliased)
+		targetType, ok := typeMap[name]
+		if !ok {
+			continue
+		}
+
+		baseExpr := aliased.Expr
+		if convert, ok := baseExpr.(*ConvertExpr); ok {
+			baseExpr = convert.Expr
+		}
+
+		exprSQL := String(baseExpr, false)
+		castExpr, err := mustParseExpr(fmt.Sprintf("cast(%s as %s)", exprSQL, targetType))
+		if err != nil {
+			return err
+		}
+		aliased.Expr = castExpr
+	}
+	return nil
 }
 
 func extractStringLiteral(expr Expr) (string, error) {
