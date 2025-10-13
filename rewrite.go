@@ -158,12 +158,16 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 		selectExprs = append(selectExprs, aliased)
 	}
 
+	sel.SelectExprs = selectExprs
+	var columnTypes map[string]string
+	if edgeTypeLiteral != "" {
+		columnTypes = typeMap[edgeTypeLiteral]
+	}
+	if err := applyTypeAnnotations(sel.SelectExprs, columnTypes); err != nil {
+		return "", false, err
+	}
 	if edgeTypeLiteral == "" {
 		return "", false, fmt.Errorf("edge sql missing literal edge_type column")
-	}
-	sel.SelectExprs = selectExprs
-	if err := applyTypeAnnotations(sel.SelectExprs, typeMap[edgeTypeLiteral]); err != nil {
-		return "", false, err
 	}
 	return edgeTypeLiteral, true, nil
 }
@@ -227,7 +231,11 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 	}
 
 	sel.SelectExprs = selectExprs
-	if err := applyTypeAnnotations(sel.SelectExprs, typeMap[pointTypeLiteral]); err != nil {
+	var columnTypes map[string]string
+	if pointTypeLiteral != "" {
+		columnTypes = typeMap[pointTypeLiteral]
+	}
+	if err := applyTypeAnnotations(sel.SelectExprs, columnTypes); err != nil {
 		return "", false, err
 	}
 	return pointTypeLiteral, true, nil

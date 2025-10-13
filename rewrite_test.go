@@ -12,7 +12,7 @@ func TestRewriteEdgeSqls(t *testing.T) {
 			"order_rate_weight": "float",
 		},
 		"sim_author": {
-			"order_rate_weight": "float",
+			"order_rate_weight": "double",
 			"property2":         "double",
 		},
 	}
@@ -80,8 +80,8 @@ FROM    (
 	if !ok {
 		t.Fatalf("expected sim_author key in rewritten map")
 	}
-	if !strings.Contains(simAuthor.Sql, "cast(order_rate_weight as float)") {
-		t.Fatalf("expected order_rate_weight to be cast to float in sim_author sql: %s", simAuthor.Sql)
+	if !strings.Contains(simAuthor.Sql, "cast(order_rate_weight as double)") {
+		t.Fatalf("expected order_rate_weight to be cast to double in sim_author sql: %s", simAuthor.Sql)
 	}
 	if !strings.Contains(simAuthor.Sql, "cast(property2 as double)") {
 		t.Fatalf("expected property2 to be cast to double in sim_author sql: %s", simAuthor.Sql)
