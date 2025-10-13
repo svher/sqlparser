@@ -6,6 +6,15 @@ import (
 )
 
 func TestRewriteEdgeSqls(t *testing.T) {
+	typeMap := map[string]map[string]string{
+		"shop_sim": {
+			"order_rate_weight": "float",
+		},
+		"sim_author": {
+			"order_rate_weight": "double",
+			"property2":         "double",
+		},
+	}
 	rewritten, err := RewriteSqls(`SELECT  DISTINCT point1_id,
         point2_id,
         point1_type,
@@ -35,7 +44,8 @@ SELECT  DISTINCT point1_id,
         value,
         ts_us,
         edge_type,
-        cast(order_rate_weight as float)
+        cast(order_rate_weight as double),
+        property2
 FROM    (
         SELECT  src AS point2_id,
                 tgt AS point1_id,
@@ -44,11 +54,12 @@ FROM    (
                 '' AS value,
                 (UNIX_TIMESTAMP() * 1000000) AS ts_us,
                 'sim_author' AS edge_type,
-                ratio_src AS order_rate_weight
+                ratio_src AS order_rate_weight,
+                'prop' AS property2
         FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
         WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
         AND     edge_type = 'author_sell_sim_1d'
-        ) a;`, false)
+        ) a;`, false, typeMap)
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
@@ -132,7 +143,7 @@ FROM
 join t
 on 1 = 1
 WHERE
-  date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 =2 and 3=3) group by d order by e`, false)
+  date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 =2 and 3=3) group by d order by e`, false, nil)
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
