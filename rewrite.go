@@ -96,8 +96,8 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 			point1Type = aliased
 		case "point2_type":
 			point2Type = aliased
-		case "value", "ts_us":
-			// value and ts_us are deprecated and should be dropped.
+		case "value":
+			// value is deprecated and should be dropped.
 		default:
 			remaining = append(remaining, aliased)
 		}
