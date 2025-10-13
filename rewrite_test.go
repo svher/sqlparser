@@ -2,6 +2,7 @@ package sqlparser
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -65,6 +66,25 @@ FROM    (
 	}
 	if len(rewritten) != 2 {
 		t.Fatalf("expected 2 rewritten sqls, got %d", len(rewritten))
+	}
+
+	shopSim, ok := rewritten["shop_sim"]
+	if !ok {
+		t.Fatalf("expected shop_sim key in rewritten map")
+	}
+	if !strings.Contains(shopSim.Sql, "cast(order_rate_weight as float)") {
+		t.Fatalf("expected order_rate_weight to be cast to float in shop_sim sql: %s", shopSim.Sql)
+	}
+
+	simAuthor, ok := rewritten["sim_author"]
+	if !ok {
+		t.Fatalf("expected sim_author key in rewritten map")
+	}
+	if !strings.Contains(simAuthor.Sql, "cast(order_rate_weight as double)") {
+		t.Fatalf("expected order_rate_weight to be cast to double in sim_author sql: %s", simAuthor.Sql)
+	}
+	if !strings.Contains(simAuthor.Sql, "cast(property2 as double)") {
+		t.Fatalf("expected property2 to be cast to double in sim_author sql: %s", simAuthor.Sql)
 	}
 
 	buffer, _ := json.MarshalIndent(rewritten, "", "  ")
@@ -141,7 +161,7 @@ SELECT
 FROM
   dm_temai.shop_fusion_group_aggregation_feature_by_vet
 join t
-on 1 = 1
+  on 1 = 1
 WHERE
   date = max_pt('dm_temai.shop_fusion_group_aggregation_feature_by_vet') and 1 = 1 or (2 =2 and 3=3) group by d order by e`, false, nil)
 	if err != nil {
