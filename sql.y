@@ -2489,6 +2489,30 @@ convert_type:
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
+| TINYINT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| SMALLINT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| MEDIUMINT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| INT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| INTEGER
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| BIGINT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
 | JSON
   {
     $$ = &ConvertType{Type: string($1)}
