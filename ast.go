@@ -2024,6 +2024,7 @@ func (*FuncExpr) iExpr()         {}
 func (*CaseExpr) iExpr()         {}
 func (*ValuesFuncExpr) iExpr()   {}
 func (*ConvertExpr) iExpr()      {}
+func (*BracketExpr) iExpr()      {}
 func (*SubstrExpr) iExpr()       {}
 func (*ConvertUsingExpr) iExpr() {}
 func (*MatchExpr) iExpr()        {}
@@ -2861,6 +2862,31 @@ type SubstrExpr struct {
 	Name *ColName
 	From Expr
 	To   Expr
+}
+
+type BracketExpr struct {
+	Expr  Expr
+	Index Expr
+}
+
+// Format formats the node.
+func (node *BracketExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%v[%v]", node.Expr, node.Index)
+}
+
+func (node *BracketExpr) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Expr,
+		node.Index,
+	)
+}
+
+func (node *BracketExpr) replace(from, to Expr) bool {
+	return replaceExprs(from, to, &node.Expr, &node.Index)
 }
 
 // Format formats the node.

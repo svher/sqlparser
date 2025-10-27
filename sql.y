@@ -2147,6 +2147,10 @@ value_expression:
   {
     $$ = $1
   }
+| value_expression '[' value_expression ']'
+  {
+    $$ = &BracketExpr{Expr: $1, Index: $3}
+  }
 | tuple_expression
   {
     $$ = $1
