@@ -28,30 +28,76 @@ func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) 
 		if stmt == nil {
 			continue
 		}
-		unwrapped := stmt
-		if withStmt, ok := stmt.(*With); ok {
-			unwrapped = withStmt.Stmt
-		}
-		selectStmt, ok := unwrapped.(*Select)
-		if !ok {
-			return nil, fmt.Errorf("unexpected statement type %T", stmt)
-		}
-		key, err := rewriteSql(selectStmt, typeMap)
+		statements, err := expandEdgeTypeStatements(stmt)
 		if err != nil {
 			return nil, err
 		}
-		rendered := strings.Replace(String(stmt, pretty)+";", "'", "\"", -1)
-		if existing, ok := rewritten[key]; ok {
-			rewritten[key].Sql = existing.Sql + "\n" + rendered
-		} else {
-			rewritten[key] = &SqlDef{
-				Sql:       rendered,
-				LabelType: "string",
+		for _, current := range statements {
+			unwrapped := current
+			if withStmt, ok := current.(*With); ok {
+				unwrapped = withStmt.Stmt
+			}
+			selectStmt, ok := unwrapped.(*Select)
+			if !ok {
+				return nil, fmt.Errorf("unexpected statement type %T", current)
+			}
+			key, err := rewriteSql(selectStmt, typeMap)
+			if err != nil {
+				return nil, err
+			}
+			rendered := strings.Replace(String(current, pretty)+";", "'", "\"", -1)
+			if existing, ok := rewritten[key]; ok {
+				rewritten[key].Sql = existing.Sql + "\n" + rendered
+			} else {
+				rewritten[key] = &SqlDef{
+					Sql:       rendered,
+					LabelType: "string",
+				}
 			}
 		}
 	}
 
 	return rewritten, nil
+}
+
+func expandEdgeTypeStatements(stmt Statement) ([]Statement, error) {
+	selectStmt, ok := selectFromStatement(stmt)
+	if !ok {
+		return []Statement{stmt}, nil
+	}
+	variants, err := extractDynamicEdgeTypeVariants(selectStmt)
+	if err != nil {
+		return nil, err
+	}
+	if len(variants) == 0 {
+		return []Statement{stmt}, nil
+	}
+
+	baseSQL := String(stmt, false)
+	statements := make([]Statement, 0, len(variants))
+	for _, variant := range variants {
+		tokenizer := NewStringTokenizer(baseSQL)
+		parsed, err := ParseNext(tokenizer)
+		if err != nil {
+			return nil, fmt.Errorf("ParseNext error while expanding edge_type: %w", err)
+		}
+		if _, err := ParseNext(tokenizer); err != io.EOF {
+			if err == nil {
+				return nil, fmt.Errorf("expected single statement while expanding edge_type")
+			}
+			return nil, fmt.Errorf("ParseNext error while validating expanded statement: %w", err)
+		}
+		selectCopy, ok := selectFromStatement(parsed)
+		if !ok {
+			return nil, fmt.Errorf("unexpected statement type %T while expanding edge_type", parsed)
+		}
+		if err := applyEdgeTypeVariant(selectCopy, variant); err != nil {
+			return nil, err
+		}
+		statements = append(statements, parsed)
+	}
+
+	return statements, nil
 }
 
 func rewriteSql(sel *Select, typeMap map[string]map[string]string) (string, error) {
@@ -201,6 +247,238 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 		return "", false, fmt.Errorf("edge sql missing literal edge_type column")
 	}
 	return edgeTypeLiteral, true, nil
+}
+
+type dynamicEdgeVariant struct {
+	Column   string
+	Value    string
+	EdgeType string
+}
+
+func selectFromStatement(stmt Statement) (*Select, bool) {
+	switch s := stmt.(type) {
+	case *Select:
+		return s, true
+	case *With:
+		if selectStmt, ok := s.Stmt.(*Select); ok {
+			return selectStmt, true
+		}
+	}
+	return nil, false
+}
+
+func extractDynamicEdgeTypeVariants(sel *Select) ([]dynamicEdgeVariant, error) {
+	edgeExpr := findAliasedExprInSelect(sel, "edge_type")
+	if edgeExpr == nil {
+		return nil, nil
+	}
+	if literal, ok := findStringLiteralForAliasInSelect(sel, "edge_type"); ok && literal != "" {
+		return nil, nil
+	}
+	if _, err := extractStringLiteral(edgeExpr.Expr); err == nil {
+		return nil, nil
+	}
+
+	columns := make(map[string]struct{})
+	collectColumnNames(edgeExpr.Expr, columns)
+	if len(columns) != 1 {
+		return nil, nil
+	}
+
+	var columnName string
+	for name := range columns {
+		columnName = name
+	}
+	values, ok := findStringValuesForColumn(sel.Where, columnName)
+	if !ok || len(values) == 0 {
+		return nil, fmt.Errorf("unable to determine values for column %s used in dynamic edge_type", columnName)
+	}
+
+	variants := make([]dynamicEdgeVariant, 0, len(values))
+	for _, value := range values {
+		edgeType, err := evaluateEdgeType(edgeExpr.Expr, map[string]string{columnName: value})
+		if err != nil {
+			return nil, err
+		}
+		variants = append(variants, dynamicEdgeVariant{
+			Column:   columnName,
+			Value:    value,
+			EdgeType: edgeType,
+		})
+	}
+
+	return variants, nil
+}
+
+func findAliasedExprInSelect(sel *Select, alias string) *AliasedExpr {
+	for _, expr := range sel.SelectExprs {
+		aliased, ok := expr.(*AliasedExpr)
+		if !ok {
+			continue
+		}
+		if aliasOrColumnName(aliased) == alias {
+			return aliased
+		}
+	}
+	return nil
+}
+
+func collectColumnNames(expr Expr, columns map[string]struct{}) {
+	switch e := expr.(type) {
+	case *ColName:
+		columns[e.Name.Lowered()] = struct{}{}
+	case *FuncExpr:
+		for _, arg := range e.Exprs {
+			if aliased, ok := arg.(*AliasedExpr); ok {
+				collectColumnNames(aliased.Expr, columns)
+			}
+		}
+	case *BinaryExpr:
+		collectColumnNames(e.Left, columns)
+		collectColumnNames(e.Right, columns)
+	case *ConvertExpr:
+		collectColumnNames(e.Expr, columns)
+	case *ParenExpr:
+		collectColumnNames(e.Expr, columns)
+	}
+}
+
+func findStringValuesForColumn(where *Where, column string) ([]string, bool) {
+	if where == nil {
+		return nil, false
+	}
+	return findStringValuesInExpr(where.Expr, column)
+}
+
+func findStringValuesInExpr(expr Expr, column string) ([]string, bool) {
+	switch e := expr.(type) {
+	case *AndExpr:
+		if values, ok := findStringValuesInExpr(e.Left, column); ok {
+			return values, true
+		}
+		return findStringValuesInExpr(e.Right, column)
+	case *ParenExpr:
+		return findStringValuesInExpr(e.Expr, column)
+	case *ComparisonExpr:
+		if !columnMatches(e.Left, column) {
+			return nil, false
+		}
+		switch e.Operator {
+		case InStr:
+			tuple, ok := e.Right.(ValTuple)
+			if !ok {
+				return nil, false
+			}
+			values := make([]string, 0, len(tuple))
+			for _, valExpr := range tuple {
+				literal, err := extractStringLiteral(valExpr)
+				if err != nil {
+					return nil, false
+				}
+				values = append(values, literal)
+			}
+			return values, true
+		case EqualStr:
+			literal, err := extractStringLiteral(e.Right)
+			if err != nil {
+				return nil, false
+			}
+			return []string{literal}, true
+		}
+	}
+	return nil, false
+}
+
+func columnMatches(expr Expr, column string) bool {
+	col, ok := expr.(*ColName)
+	if !ok {
+		return false
+	}
+	return col.Name.Lowered() == column
+}
+
+func evaluateEdgeType(expr Expr, values map[string]string) (string, error) {
+	switch e := expr.(type) {
+	case *SQLVal:
+		if e.Type != StrVal {
+			return "", fmt.Errorf("edge_type expression contains non-string literal %T", expr)
+		}
+		return string(e.Val), nil
+	case *ColName:
+		value, ok := values[e.Name.Lowered()]
+		if !ok {
+			return "", fmt.Errorf("missing value for column %s in edge_type expression", e.Name.Lowered())
+		}
+		return value, nil
+	case *FuncExpr:
+		if e.Name.Lowered() != "concat" {
+			return "", fmt.Errorf("unsupported function %s in edge_type expression", e.Name.String())
+		}
+		var parts []string
+		for _, arg := range e.Exprs {
+			aliased, ok := arg.(*AliasedExpr)
+			if !ok {
+				return "", fmt.Errorf("unexpected concat argument type %T", arg)
+			}
+			part, err := evaluateEdgeType(aliased.Expr, values)
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, part)
+		}
+		return strings.Join(parts, ""), nil
+	case *BinaryExpr:
+		left, err := evaluateEdgeType(e.Left, values)
+		if err != nil {
+			return "", err
+		}
+		right, err := evaluateEdgeType(e.Right, values)
+		if err != nil {
+			return "", err
+		}
+		return left + right, nil
+	case *ConvertExpr:
+		return evaluateEdgeType(e.Expr, values)
+	case *ParenExpr:
+		return evaluateEdgeType(e.Expr, values)
+	}
+	return "", fmt.Errorf("unsupported expression type %T in edge_type expression", expr)
+}
+
+func applyEdgeTypeVariant(sel *Select, variant dynamicEdgeVariant) error {
+	edgeExpr := findAliasedExprInSelect(sel, "edge_type")
+	if edgeExpr == nil {
+		return fmt.Errorf("edge_type column not found while applying variant")
+	}
+	edgeExpr.Expr = NewStrVal([]byte(variant.EdgeType))
+
+	if sel.Where == nil {
+		return fmt.Errorf("unable to constrain column %s: missing WHERE clause", variant.Column)
+	}
+	if !applyValueToColumnInExpr(sel.Where.Expr, variant.Column, variant.Value) {
+		return fmt.Errorf("failed to constrain column %s in WHERE clause", variant.Column)
+	}
+	return nil
+}
+
+func applyValueToColumnInExpr(expr Expr, column, value string) bool {
+	switch e := expr.(type) {
+	case *AndExpr:
+		if applyValueToColumnInExpr(e.Left, column, value) {
+			return true
+		}
+		return applyValueToColumnInExpr(e.Right, column, value)
+	case *ParenExpr:
+		return applyValueToColumnInExpr(e.Expr, column, value)
+	case *ComparisonExpr:
+		if !columnMatches(e.Left, column) {
+			return false
+		}
+		e.Right = NewStrVal([]byte(value))
+		e.Operator = EqualStr
+		return true
+	}
+	return false
 }
 
 func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string, bool, error) {
