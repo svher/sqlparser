@@ -1738,6 +1738,10 @@ table_factor:
   {
     $$ = &AliasedTableExpr{Expr:$1, As: $3}
   }
+| subquery
+  {
+    $$ = &AliasedTableExpr{Expr:$1}
+  }
 | openb table_references closeb
   {
     $$ = &ParenTableExpr{Exprs: $2}
