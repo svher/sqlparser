@@ -2777,6 +2777,7 @@ func (node *FuncExpr) replace(from, to Expr) bool {
 
 type WindowSpecification struct {
 	PartitionBy Exprs
+	OrderBy     OrderBy
 }
 
 func (node *WindowSpecification) Format(buf *TrackedBuffer) {
@@ -2785,6 +2786,12 @@ func (node *WindowSpecification) Format(buf *TrackedBuffer) {
 	}
 	if len(node.PartitionBy) > 0 {
 		buf.Myprintf("partition by %v", node.PartitionBy)
+	}
+	if len(node.OrderBy) > 0 {
+		if len(node.PartitionBy) > 0 {
+			buf.Myprintf(" ")
+		}
+		buf.Myprintf("%v", node.OrderBy)
 	}
 }
 
@@ -2795,6 +2802,7 @@ func (node *WindowSpecification) walkSubtree(visit Visit) error {
 	return Walk(
 		visit,
 		node.PartitionBy,
+		node.OrderBy,
 	)
 }
 
@@ -2808,6 +2816,11 @@ func (node *WindowSpecification) replace(from, to Expr) bool {
 			return true
 		}
 		if expr.replace(from, to) {
+			return true
+		}
+	}
+	for _, order := range node.OrderBy {
+		if replaceExprs(from, to, &order.Expr) {
 			return true
 		}
 	}
@@ -3252,6 +3265,11 @@ func (node *Order) Format(buf *TrackedBuffer) {
 			buf.Myprintf("%v", node)
 			return
 		}
+	}
+
+	if node.Direction == "" {
+		buf.Myprintf("%v", node.Expr)
+		return
 	}
 
 	buf.Myprintf("%v %s", node.Expr, node.Direction)

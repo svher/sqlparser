@@ -165,6 +165,11 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 							point1Type.Expr,
 							point2Type.Expr,
 						},
+						OrderBy: OrderBy{
+							&Order{
+								Expr: NewIntVal([]byte("1")),
+							},
+						},
 					},
 				},
 				As: NewColIdent("rn"),
