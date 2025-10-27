@@ -2777,6 +2777,7 @@ func (node *FuncExpr) replace(from, to Expr) bool {
 
 type WindowSpecification struct {
 	PartitionBy Exprs
+	OrderBy     OrderBy
 }
 
 func (node *WindowSpecification) Format(buf *TrackedBuffer) {
@@ -2785,6 +2786,9 @@ func (node *WindowSpecification) Format(buf *TrackedBuffer) {
 	}
 	if len(node.PartitionBy) > 0 {
 		buf.Myprintf("partition by %v", node.PartitionBy)
+	}
+	if len(node.OrderBy) > 0 {
+		buf.Myprintf("%v", node.OrderBy)
 	}
 }
 
@@ -2795,6 +2799,7 @@ func (node *WindowSpecification) walkSubtree(visit Visit) error {
 	return Walk(
 		visit,
 		node.PartitionBy,
+		node.OrderBy,
 	)
 }
 
@@ -3254,7 +3259,11 @@ func (node *Order) Format(buf *TrackedBuffer) {
 		}
 	}
 
-	buf.Myprintf("%v %s", node.Expr, node.Direction)
+	if node.Direction == "" {
+		buf.Myprintf("%v", node.Expr)
+	} else {
+		buf.Myprintf("%v %s", node.Expr, node.Direction)
+	}
 }
 
 func (node *Order) walkSubtree(visit Visit) error {
