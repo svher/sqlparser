@@ -337,10 +337,8 @@ func findStringLiteralForAliasInTableExpr(tableExpr TableExpr, alias string) (st
 	switch expr := tableExpr.(type) {
 	case *AliasedTableExpr:
 		if subquery, ok := expr.Expr.(*Subquery); ok {
-			if sel, ok := subquery.Select.(*Select); ok {
-				if literal, ok := findStringLiteralForAliasInSelect(sel, alias); ok {
-					return literal, true
-				}
+			if literal, ok := findStringLiteralForAliasInSelectStatement(subquery.Select, alias); ok {
+				return literal, true
 			}
 		}
 	case *ParenTableExpr:
@@ -356,6 +354,19 @@ func findStringLiteralForAliasInTableExpr(tableExpr TableExpr, alias string) (st
 		if literal, ok := findStringLiteralForAliasInTableExpr(expr.RightExpr, alias); ok {
 			return literal, true
 		}
+	}
+	return "", false
+}
+
+func findStringLiteralForAliasInSelectStatement(stmt SelectStatement, alias string) (string, bool) {
+	switch s := stmt.(type) {
+	case *Select:
+		return findStringLiteralForAliasInSelect(s, alias)
+	case *Union:
+		if literal, ok := findStringLiteralForAliasInSelectStatement(s.Left, alias); ok {
+			return literal, true
+		}
+		return findStringLiteralForAliasInSelectStatement(s.Right, alias)
 	}
 	return "", false
 }
