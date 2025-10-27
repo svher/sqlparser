@@ -2723,6 +2723,7 @@ type FuncExpr struct {
 	Name      ColIdent
 	Distinct  bool
 	Exprs     SelectExprs
+	Over      *WindowSpecification
 }
 
 // Format formats the node.
@@ -2738,6 +2739,9 @@ func (node *FuncExpr) Format(buf *TrackedBuffer) {
 	// if they match a reserved word. So, print the
 	// name as is.
 	buf.Myprintf("%s(%s%v)", node.Name.String(), distinct, node.Exprs)
+	if node.Over != nil {
+		buf.Myprintf(" over (%v)", node.Over)
+	}
 }
 
 func (node *FuncExpr) walkSubtree(visit Visit) error {
@@ -2749,6 +2753,7 @@ func (node *FuncExpr) walkSubtree(visit Visit) error {
 		node.Qualifier,
 		node.Name,
 		node.Exprs,
+		node.Over,
 	)
 }
 
@@ -2759,6 +2764,63 @@ func (node *FuncExpr) replace(from, to Expr) bool {
 			continue
 		}
 		if replaceExprs(from, to, &aliased.Expr) {
+			return true
+		}
+	}
+	if node.Over != nil {
+		if node.Over.replace(from, to) {
+			return true
+		}
+	}
+	return false
+}
+
+type WindowSpecification struct {
+	PartitionBy Exprs
+	OrderBy     OrderBy
+}
+
+func (node *WindowSpecification) Format(buf *TrackedBuffer) {
+	if node == nil {
+		return
+	}
+	if len(node.PartitionBy) > 0 {
+		buf.Myprintf("partition by %v", node.PartitionBy)
+	}
+	if len(node.OrderBy) > 0 {
+		if len(node.PartitionBy) > 0 {
+			buf.Myprintf(" ")
+		}
+		buf.Myprintf("%v", node.OrderBy)
+	}
+}
+
+func (node *WindowSpecification) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.PartitionBy,
+		node.OrderBy,
+	)
+}
+
+func (node *WindowSpecification) replace(from, to Expr) bool {
+	if node == nil {
+		return false
+	}
+	for i, expr := range node.PartitionBy {
+		if expr == from {
+			node.PartitionBy[i] = to
+			return true
+		}
+		if expr.replace(from, to) {
+			return true
+		}
+	}
+	for _, order := range node.OrderBy {
+		if replaceExprs(from, to, &order.Expr) {
 			return true
 		}
 	}
@@ -3203,6 +3265,11 @@ func (node *Order) Format(buf *TrackedBuffer) {
 			buf.Myprintf("%v", node)
 			return
 		}
+	}
+
+	if node.Direction == "" {
+		buf.Myprintf("%v", node.Expr)
+		return
 	}
 
 	buf.Myprintf("%v %s", node.Expr, node.Direction)

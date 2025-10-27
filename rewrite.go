@@ -151,6 +151,45 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 	}
 
 	sel.SelectExprs = selectExprs
+
+	rowSelect := &Select{
+		SelectExprs: SelectExprs{
+			&StarExpr{},
+			&AliasedExpr{
+				Expr: &FuncExpr{
+					Name: NewColIdent("row_number"),
+					Over: &WindowSpecification{
+						PartitionBy: Exprs{
+							point1ID.Expr,
+							point2ID.Expr,
+							point1Type.Expr,
+							point2Type.Expr,
+						},
+						OrderBy: OrderBy{
+							&Order{
+								Expr: NewIntVal([]byte("1")),
+							},
+						},
+					},
+				},
+				As: NewColIdent("rn"),
+			},
+		},
+		From: sel.From,
+	}
+	sel.From = TableExprs{
+		&AliasedTableExpr{
+			Expr: &Subquery{Select: rowSelect},
+		},
+	}
+	sel.AddWhere(&ComparisonExpr{
+		Operator: EqualStr,
+		Left: &ColName{
+			Name: NewColIdent("rn"),
+		},
+		Right: NewIntVal([]byte("1")),
+	})
+
 	var columnTypes map[string]string
 	if edgeTypeLiteral != "" {
 		columnTypes = typeMap[edgeTypeLiteral]
