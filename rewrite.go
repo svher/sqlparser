@@ -152,13 +152,6 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 
 	sel.SelectExprs = selectExprs
 
-	applyDeduplication(sel, Exprs{
-		point1ID.Expr,
-		point2ID.Expr,
-		point1Type.Expr,
-		point2Type.Expr,
-	})
-
 	var columnTypes map[string]string
 	if edgeTypeLiteral != "" {
 		columnTypes = typeMap[edgeTypeLiteral]
@@ -169,6 +162,14 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 	if edgeTypeLiteral == "" {
 		return "", false, fmt.Errorf("edge sql missing literal edge_type column")
 	}
+
+	applyDeduplication(sel, Exprs{
+		point1ID.Expr,
+		point2ID.Expr,
+		point1Type.Expr,
+		point2Type.Expr,
+	})
+
 	return edgeTypeLiteral, true, nil
 }
 
@@ -231,10 +232,7 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 	}
 
 	sel.SelectExprs = selectExprs
-	applyDeduplication(sel, Exprs{
-		pointID.Expr,
-		pointType.Expr,
-	})
+
 	var columnTypes map[string]string
 	if pointTypeLiteral != "" {
 		columnTypes = typeMap[pointTypeLiteral]
@@ -242,6 +240,12 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 	if err := applyTypeAnnotations(sel.SelectExprs, columnTypes); err != nil {
 		return "", false, err
 	}
+
+	applyDeduplication(sel, Exprs{
+		pointID.Expr,
+		pointType.Expr,
+	})
+
 	return pointTypeLiteral, true, nil
 }
 
@@ -280,27 +284,63 @@ func applyDeduplication(sel *Select, partitionExprs Exprs) {
 		return
 	}
 
-	rowSelect := &Select{
-		SelectExprs: SelectExprs{
-			&StarExpr{},
-			&AliasedExpr{
-				Expr: &FuncExpr{
-					Name: NewColIdent("row_number"),
-					Over: &WindowSpecification{
-						PartitionBy: partitionExprs,
-						OrderBy: OrderBy{
-							&Order{
-								Expr: NewIntVal([]byte("1")),
-							},
-						},
+	outerSelectExprs := make(SelectExprs, 0, len(sel.SelectExprs))
+	rowSelectExprs := make(SelectExprs, 0, len(sel.SelectExprs)+1)
+
+	for i, expr := range sel.SelectExprs {
+		switch e := expr.(type) {
+		case *AliasedExpr:
+			innerAlias := fmt.Sprintf("__vt_col%d", i)
+			rowSelectExprs = append(rowSelectExprs, &AliasedExpr{
+				Expr: e.Expr,
+				As:   NewColIdent(innerAlias),
+			})
+
+			outerExpr := &AliasedExpr{
+				Expr: &ColName{
+					Name: NewColIdent(innerAlias),
+				},
+			}
+
+			if name := aliasOrColumnName(e); name != "" {
+				outerExpr.As = NewColIdent(name)
+			}
+
+			outerSelectExprs = append(outerSelectExprs, outerExpr)
+		case *StarExpr:
+			// Preserve star expressions by projecting them directly from the
+			// deduplicated subquery.
+			rowSelectExprs = append(rowSelectExprs, expr)
+			outerSelectExprs = append(outerSelectExprs, &StarExpr{})
+		default:
+			// If we encounter an expression we do not know how to rewrite, skip
+			// deduplication to avoid changing semantics.
+			return
+		}
+	}
+
+	rowSelectExprs = append(rowSelectExprs, &AliasedExpr{
+		Expr: &FuncExpr{
+			Name: NewColIdent("row_number"),
+			Over: &WindowSpecification{
+				PartitionBy: partitionExprs,
+				OrderBy: OrderBy{
+					&Order{
+						Expr: NewIntVal([]byte("1")),
 					},
 				},
-				As: NewColIdent("rn"),
 			},
 		},
-		From:  sel.From,
-		Where: sel.Where,
+		As: NewColIdent("rn"),
+	})
+
+	rowSelect := &Select{
+		SelectExprs: rowSelectExprs,
+		From:        sel.From,
+		Where:       sel.Where,
 	}
+
+	sel.SelectExprs = outerSelectExprs
 	sel.From = TableExprs{
 		&AliasedTableExpr{
 			Expr: &Subquery{Select: rowSelect},
@@ -314,6 +354,7 @@ func applyDeduplication(sel *Select, partitionExprs Exprs) {
 		},
 		Right: NewIntVal([]byte("1")),
 	})
+	sel.Distinct = ""
 }
 
 func extractStringLiteral(expr Expr) (string, error) {
@@ -409,9 +450,7 @@ func newAliasedExprFromString(expr, alias string) (*AliasedExpr, error) {
 func deriveAliasFromExpr(expr Expr) string {
 	switch e := expr.(type) {
 	case *ColName:
-		if e.Qualifier.IsEmpty() {
-			return e.Name.Lowered()
-		}
+		return e.Name.Lowered()
 	case *ConvertExpr:
 		return deriveAliasFromExpr(e.Expr)
 	case *ParenExpr:
