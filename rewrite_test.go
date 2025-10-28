@@ -60,12 +60,51 @@ FROM    (
         FROM    dm_temai.shop_gandalf_v1_3_graph_structure_di
         WHERE   date = max_pt('dm_temai.shop_gandalf_v1_3_graph_structure_di')
         AND     edge_type = 'author_sell_sim_1d'
-        ) a;`, false, typeMap)
+        ) a;
+
+SELECT  concat(link_type, '_', CAST(group_id AS STRING)) AS point1_id,
+        CAST(entity_id AS STRING) AS point2_id,
+        'group' AS point1_type,
+        'shop' AS point2_type,
+        UNIX_TIMESTAMP() * 1000000 AS ts_us,
+        concat(link_type, '_', 'group') AS edge_type
+FROM    ecom_govern_community.group_few_shot_base_link_devide_group
+WHERE   date = max_pt('ecom_govern_community.group_few_shot_base_link_devide_group')
+AND     link_type IN (
+        'shop_strong',
+        'shop_pledgeId',
+        'shop_oceadId',
+        'shop_mobile',
+        'shop_idCard',
+        'shop_highprec',
+        'shop_chargeMobile',
+        'shop_bizNum',
+        'shop_bank',
+        'shop_aftersaleMobile',
+        'shop_90dSendAddrGh8',
+        'shop_90dProductBindAuthor',
+        'shop_90dOrderProductSimNew',
+        'shop_90dOrderAuthor',
+        'shop_90dLoginIp',
+        'shop_90dLoginDid',
+        'shop_90dCreateProductSimNew'
+);`, false, typeMap)
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
-	if len(rewritten) != 2 {
-		t.Fatalf("expected 2 rewritten sqls, got %d", len(rewritten))
+	if len(rewritten) != 19 {
+		t.Fatalf("expected 19 rewritten sqls, got %d", len(rewritten))
+	}
+
+	for _, edgeType := range []string{
+		"shop_strong_group",
+		"shop_pledgeId_group",
+		"shop_oceadId_group",
+		"shop_mobile_group",
+	} {
+		if _, ok := rewritten[edgeType]; !ok {
+			t.Fatalf("expected rewritten sql for %s", edgeType)
+		}
 	}
 
 	buffer, _ := json.MarshalIndent(rewritten, "", "  ")
