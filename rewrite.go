@@ -77,6 +77,7 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 		point2ID   *AliasedExpr
 		point1Type *AliasedExpr
 		point2Type *AliasedExpr
+		edgeType   *AliasedExpr
 		remaining  SelectExprs
 	)
 
@@ -138,6 +139,7 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 
 		switch aliasOrColumnName(aliased) {
 		case "edge_type":
+			edgeType = aliased
 			aliased.As = NewColIdent("label")
 			if edgeTypeLiteral == "" {
 				if literal, err := extractStringLiteral(aliased.Expr); err == nil {
@@ -151,6 +153,12 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 	}
 
 	sel.SelectExprs = selectExprs
+
+	if edgeTypeLiteral == "" && edgeType != nil {
+		if literal, ok := deriveEdgeTypeLiteralFromExpr(sel, edgeType.Expr); ok {
+			edgeTypeLiteral = literal
+		}
+	}
 
 	applyDeduplication(sel, Exprs{
 		point1ID.Expr,
@@ -422,6 +430,136 @@ func findStringLiteralForAliasInSelectStatement(stmt SelectStatement, alias stri
 		return findStringLiteralForAliasInSelectStatement(s.Right, alias)
 	}
 	return "", false
+}
+
+func deriveEdgeTypeLiteralFromExpr(sel *Select, expr Expr) (string, bool) {
+	if sel == nil || sel.Where == nil || expr == nil {
+		return "", false
+	}
+
+	bindings := make(map[string]string)
+	collectStringColumnBindings(sel.Where.Expr, bindings)
+	if len(bindings) == 0 {
+		return "", false
+	}
+
+	literal, err := evaluateStringExpr(expr, bindings)
+	if err != nil || literal == "" {
+		return "", false
+	}
+
+	return literal, true
+}
+
+func collectStringColumnBindings(expr Expr, bindings map[string]string) {
+	switch e := expr.(type) {
+	case *AndExpr:
+		collectStringColumnBindings(e.Left, bindings)
+		collectStringColumnBindings(e.Right, bindings)
+	case *ParenExpr:
+		collectStringColumnBindings(e.Expr, bindings)
+	case *ComparisonExpr:
+		recordComparisonBinding(e, bindings)
+	}
+}
+
+func recordComparisonBinding(expr *ComparisonExpr, bindings map[string]string) {
+	if expr == nil {
+		return
+	}
+
+	switch expr.Operator {
+	case InStr:
+		col, ok := expr.Left.(*ColName)
+		if !ok {
+			return
+		}
+		tuple, ok := expr.Right.(ValTuple)
+		if !ok {
+			return
+		}
+		for _, valExpr := range tuple {
+			if literal, err := extractStringLiteral(valExpr); err == nil {
+				recordStringBinding(col, literal, bindings)
+				break
+			}
+		}
+	case EqualStr:
+		if col, literal, ok := resolveEqualityBinding(expr.Left, expr.Right); ok {
+			recordStringBinding(col, literal, bindings)
+		}
+	}
+}
+
+func resolveEqualityBinding(left Expr, right Expr) (*ColName, string, bool) {
+	if col, ok := left.(*ColName); ok {
+		if literal, err := extractStringLiteral(right); err == nil {
+			return col, literal, true
+		}
+	}
+	if col, ok := right.(*ColName); ok {
+		if literal, err := extractStringLiteral(left); err == nil {
+			return col, literal, true
+		}
+	}
+	return nil, "", false
+}
+
+func recordStringBinding(col *ColName, value string, bindings map[string]string) {
+	if col == nil || value == "" {
+		return
+	}
+	key := col.Name.Lowered()
+	if key == "" {
+		return
+	}
+	if _, exists := bindings[key]; !exists {
+		bindings[key] = value
+	}
+}
+
+func evaluateStringExpr(expr Expr, bindings map[string]string) (string, error) {
+	switch e := expr.(type) {
+	case *SQLVal:
+		if e.Type != StrVal {
+			return "", fmt.Errorf("unsupported sql value type %d", e.Type)
+		}
+		return string(e.Val), nil
+	case *ColName:
+		key := e.Name.Lowered()
+		if key == "" {
+			return "", fmt.Errorf("column name is empty")
+		}
+		value, ok := bindings[key]
+		if !ok {
+			return "", fmt.Errorf("missing binding for column %s", key)
+		}
+		return value, nil
+	case *FuncExpr:
+		switch e.Name.Lowered() {
+		case "concat":
+			var builder strings.Builder
+			for _, arg := range e.Exprs {
+				aliased, ok := arg.(*AliasedExpr)
+				if !ok {
+					return "", fmt.Errorf("unsupported concat argument type %T", arg)
+				}
+				part, err := evaluateStringExpr(aliased.Expr, bindings)
+				if err != nil {
+					return "", err
+				}
+				builder.WriteString(part)
+			}
+			return builder.String(), nil
+		default:
+			return "", fmt.Errorf("unsupported function %s", e.Name.String())
+		}
+	case *ConvertExpr:
+		return evaluateStringExpr(e.Expr, bindings)
+	case *ParenExpr:
+		return evaluateStringExpr(e.Expr, bindings)
+	}
+	return "", fmt.Errorf("unsupported expression type %T", expr)
 }
 
 func aliasOrColumnName(ae *AliasedExpr) string {
