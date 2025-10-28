@@ -280,37 +280,80 @@ func applyDeduplication(sel *Select, partitionExprs Exprs) {
 		return
 	}
 
-	rowSelect := &Select{
-		SelectExprs: SelectExprs{
-			&StarExpr{},
-			&AliasedExpr{
-				Expr: &FuncExpr{
-					Name: NewColIdent("row_number"),
-					Over: &WindowSpecification{
-						PartitionBy: partitionExprs,
-						OrderBy: OrderBy{
-							&Order{
-								Expr: NewIntVal([]byte("1")),
-							},
-						},
+	dedupAlias := NewTableIdent("__vt_dedup")
+
+	outerSelectExprs := make(SelectExprs, 0, len(sel.SelectExprs))
+	rowSelectExprs := make(SelectExprs, 0, len(sel.SelectExprs)+1)
+
+	for i, expr := range sel.SelectExprs {
+		switch e := expr.(type) {
+		case *AliasedExpr:
+			innerAlias := fmt.Sprintf("__vt_col%d", i)
+			rowSelectExprs = append(rowSelectExprs, &AliasedExpr{
+				Expr: e.Expr,
+				As:   NewColIdent(innerAlias),
+			})
+
+			outerExpr := &AliasedExpr{
+				Expr: &ColName{
+					Name:      NewColIdent(innerAlias),
+					Qualifier: TableName{Name: dedupAlias},
+				},
+			}
+
+			if name := aliasOrColumnName(e); name != "" {
+				outerExpr.As = NewColIdent(name)
+			}
+
+			outerSelectExprs = append(outerSelectExprs, outerExpr)
+		case *StarExpr:
+			// Preserve star expressions by projecting them directly from the
+			// deduplicated subquery.
+			rowSelectExprs = append(rowSelectExprs, expr)
+			outerSelectExprs = append(outerSelectExprs, &StarExpr{
+				TableName: TableName{Name: dedupAlias},
+			})
+		default:
+			// If we encounter an expression we do not know how to rewrite, skip
+			// deduplication to avoid changing semantics.
+			return
+		}
+	}
+
+	rowSelectExprs = append(rowSelectExprs, &AliasedExpr{
+		Expr: &FuncExpr{
+			Name: NewColIdent("row_number"),
+			Over: &WindowSpecification{
+				PartitionBy: partitionExprs,
+				OrderBy: OrderBy{
+					&Order{
+						Expr: NewIntVal([]byte("1")),
 					},
 				},
-				As: NewColIdent("rn"),
 			},
 		},
-		From:  sel.From,
-		Where: sel.Where,
+		As: NewColIdent("rn"),
+	})
+
+	rowSelect := &Select{
+		SelectExprs: rowSelectExprs,
+		From:        sel.From,
+		Where:       sel.Where,
 	}
+
+	sel.SelectExprs = outerSelectExprs
 	sel.From = TableExprs{
 		&AliasedTableExpr{
 			Expr: &Subquery{Select: rowSelect},
+			As:   dedupAlias,
 		},
 	}
 	sel.Where = nil
 	sel.AddWhere(&ComparisonExpr{
 		Operator: EqualStr,
 		Left: &ColName{
-			Name: NewColIdent("rn"),
+			Name:      NewColIdent("rn"),
+			Qualifier: TableName{Name: dedupAlias},
 		},
 		Right: NewIntVal([]byte("1")),
 	})
