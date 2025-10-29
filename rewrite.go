@@ -130,15 +130,21 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 		return "", nil, false, fmt.Errorf("missing required columns: p1=%t p2=%t p1Type=%t p2Type=%t", point1ID != nil, point2ID != nil, point1Type != nil, point2Type != nil)
 	}
 
-	point1Expr, err := newAliasedExprFromString(fmt.Sprintf("named_struct('id', cast(%s as string))", String(point1ID.Expr, false)), "outv_pk_prop")
-	if err != nil {
-		return "", nil, false, err
+	point1Expr := &AliasedExpr{
+		Expr: &FuncExpr{
+			Name: NewColIdent("named_struct"),
+			Exprs: SelectExprs{
+				&AliasedExpr{Expr: NewStrVal([]byte("id"))},
+				&AliasedExpr{Expr: ensureStringCast(point1ID.Expr)},
+			},
+		},
+		As: NewColIdent("outv_pk_prop"),
 	}
 	selectExprs := SelectExprs{point1Expr}
 
-	point2Expr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(point2ID.Expr, false)), "bg__id")
-	if err != nil {
-		return "", nil, false, err
+	point2Expr := &AliasedExpr{
+		Expr: ensureStringCast(point2ID.Expr),
+		As:   NewColIdent("bg__id"),
 	}
 	selectExprs = append(selectExprs, point2Expr)
 
@@ -235,9 +241,9 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 
 	pointType.As = NewColIdent("label")
 
-	pointIDExpr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(pointID.Expr, false)), "id")
-	if err != nil {
-		return "", nil, false, err
+	pointIDExpr := &AliasedExpr{
+		Expr: ensureStringCast(pointID.Expr),
+		As:   NewColIdent("id"),
 	}
 	selectExprs := SelectExprs{pointType, pointIDExpr}
 
@@ -666,15 +672,23 @@ func aliasOrColumnName(ae *AliasedExpr) string {
 	return deriveAliasFromExpr(ae.Expr)
 }
 
-func newAliasedExprFromString(expr, alias string) (*AliasedExpr, error) {
-	parsedExpr, err := mustParseExpr(expr)
-	if err != nil {
-		return nil, err
+func ensureStringCast(expr Expr) Expr {
+	if isStringCastExpr(expr) {
+		return expr
 	}
-	return &AliasedExpr{
-		Expr: parsedExpr,
-		As:   NewColIdent(alias),
-	}, nil
+	return &ConvertExpr{
+		Expr: expr,
+		Type: &ConvertType{Type: "string"},
+		Cast: true,
+	}
+}
+
+func isStringCastExpr(expr Expr) bool {
+	convertExpr, ok := expr.(*ConvertExpr)
+	if !ok || !convertExpr.Cast || convertExpr.Type == nil {
+		return false
+	}
+	return strings.EqualFold(convertExpr.Type.Type, "string")
 }
 
 func deriveAliasFromExpr(expr Expr) string {
@@ -687,20 +701,4 @@ func deriveAliasFromExpr(expr Expr) string {
 		return deriveAliasFromExpr(e.Expr)
 	}
 	return ""
-}
-
-func mustParseExpr(expr string) (Expr, error) {
-	stmt, err := Parse("select " + expr)
-	if err != nil {
-		return nil, fmt.Errorf("parse expression %q: %w", expr, err)
-	}
-	sel, ok := stmt.(*Select)
-	if !ok || len(sel.SelectExprs) != 1 {
-		return nil, fmt.Errorf("unexpected expression parse tree for %q", expr)
-	}
-	aliased, ok := sel.SelectExprs[0].(*AliasedExpr)
-	if !ok {
-		return nil, fmt.Errorf("expression %q did not parse as *AliasedExpr", expr)
-	}
-	return aliased.Expr, nil
 }
