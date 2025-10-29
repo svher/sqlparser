@@ -11,12 +11,22 @@ type SqlDef struct {
 	LabelType string `json:"label_type"`
 }
 
+type rewriteResult struct {
+	statement    Statement
+	selectStmt   *Select
+	dedupColumns []string
+}
+
 func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) (map[string]*SqlDef, error) {
 	if len(strings.TrimSpace(sql)) == 0 {
 		return nil, nil
 	}
 	tokenizer := NewStringTokenizer(sql)
 	rewritten := make(map[string]*SqlDef)
+	grouped := make(map[string][]*rewriteResult)
+	appendResult := func(key string, result *rewriteResult) {
+		grouped[key] = append(grouped[key], result)
+	}
 	for {
 		stmt, err := ParseNext(tokenizer)
 		if err == io.EOF {
@@ -36,40 +46,53 @@ func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) 
 		if !ok {
 			return nil, fmt.Errorf("unexpected statement type %T", stmt)
 		}
-		key, err := rewriteSql(selectStmt, typeMap)
+		key, dedupCols, err := rewriteSql(stmt, selectStmt, typeMap)
 		if err != nil {
 			return nil, err
 		}
-		rendered := strings.Replace(String(stmt, pretty)+";", "'", "\"", -1)
-		if existing, ok := rewritten[key]; ok {
-			rewritten[key].Sql = existing.Sql + "\n" + rendered
-		} else {
-			rewritten[key] = &SqlDef{
-				Sql:       rendered,
-				LabelType: "string",
-			}
+		appendResult(key, &rewriteResult{
+			statement:    stmt,
+			selectStmt:   selectStmt,
+			dedupColumns: dedupCols,
+		})
+	}
+
+	for key, results := range grouped {
+		statements, err := finalizeRewriteGroup(results)
+		if err != nil {
+			return nil, err
+		}
+
+		rendered := make([]string, 0, len(statements))
+		for _, stmt := range statements {
+			rendered = append(rendered, strings.Replace(String(stmt, pretty)+";", "'", "\"", -1))
+		}
+
+		rewritten[key] = &SqlDef{
+			Sql:       strings.Join(rendered, "\n"),
+			LabelType: "string",
 		}
 	}
 
 	return rewritten, nil
 }
 
-func rewriteSql(sel *Select, typeMap map[string]map[string]string) (string, error) {
-	if key, rewritten, err := rewriteEdgeSql(sel, typeMap); err != nil {
-		return "", err
+func rewriteSql(stmt Statement, sel *Select, typeMap map[string]map[string]string) (string, []string, error) {
+	if key, dedupCols, rewritten, err := rewriteEdgeSql(sel, typeMap); err != nil {
+		return "", nil, err
 	} else if rewritten {
-		return key, nil
+		return key, dedupCols, nil
 	}
-	if key, rewritten, err := rewritePointSql(sel, typeMap); err != nil {
-		return "", err
+	if key, dedupCols, rewritten, err := rewritePointSql(sel, typeMap); err != nil {
+		return "", nil, err
 	} else if rewritten {
-		return key, nil
+		return key, dedupCols, nil
 	}
 
-	return "", fmt.Errorf("select does not contain recognizable point or edge columns")
+	return "", nil, fmt.Errorf("select does not contain recognizable point or edge columns")
 }
 
-func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, bool, error) {
+func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, []string, bool, error) {
 	edgeTypeLiteral, _ := findStringLiteralForAliasInSelect(sel, "edge_type")
 
 	var (
@@ -105,22 +128,22 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 	}
 
 	if point1ID == nil && point2ID == nil && point1Type == nil && point2Type == nil {
-		return "", false, nil
+		return "", nil, false, nil
 	}
 
 	if point1ID == nil || point2ID == nil || point1Type == nil || point2Type == nil {
-		return "", false, fmt.Errorf("missing required columns: p1=%t p2=%t p1Type=%t p2Type=%t", point1ID != nil, point2ID != nil, point1Type != nil, point2Type != nil)
+		return "", nil, false, fmt.Errorf("missing required columns: p1=%t p2=%t p1Type=%t p2Type=%t", point1ID != nil, point2ID != nil, point1Type != nil, point2Type != nil)
 	}
 
 	point1Expr, err := newAliasedExprFromString(fmt.Sprintf("named_struct('id', cast(%s as string))", String(point1ID.Expr, false)), "outv_pk_prop")
 	if err != nil {
-		return "", false, err
+		return "", nil, false, err
 	}
 	selectExprs := SelectExprs{point1Expr}
 
 	point2Expr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(point2ID.Expr, false)), "bg__id")
 	if err != nil {
-		return "", false, err
+		return "", nil, false, err
 	}
 	selectExprs = append(selectExprs, point2Expr)
 
@@ -160,23 +183,16 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 		}
 	}
 	if edgeTypeLiteral == "" {
-		return "", false, fmt.Errorf("edge sql missing literal edge_type column")
+		return "", nil, false, fmt.Errorf("edge sql missing literal edge_type column")
 	}
 	if err := applyTypeAnnotations(sel.SelectExprs, typeMap[edgeTypeLiteral]); err != nil {
-		return "", false, err
+		return "", nil, false, err
 	}
 
-	applyDeduplication(sel, Exprs{
-		point1ID.Expr,
-		point2ID.Expr,
-		point1Type.Expr,
-		point2Type.Expr,
-	})
-
-	return edgeTypeLiteral, true, nil
+	return edgeTypeLiteral, []string{"outv_pk_prop", "bg__id", "outv_label", "bg__bg__label"}, true, nil
 }
 
-func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string, bool, error) {
+func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string, []string, bool, error) {
 	var (
 		pointID          *AliasedExpr
 		pointType        *AliasedExpr
@@ -204,11 +220,11 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 	}
 
 	if pointID == nil && pointType == nil {
-		return "", false, nil
+		return "", nil, false, nil
 	}
 
 	if pointID == nil || pointType == nil {
-		return "", false, fmt.Errorf("missing required point columns: point_id=%t point_type=%t", pointID != nil, pointType != nil)
+		return "", nil, false, fmt.Errorf("missing required point columns: point_id=%t point_type=%t", pointID != nil, pointType != nil)
 	}
 
 	literal, err := extractStringLiteral(pointType.Expr)
@@ -216,7 +232,7 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 		if fallback, ok := findStringLiteralForAliasInSelect(sel, "point_type"); ok {
 			pointTypeLiteral = fallback
 		} else {
-			return "", false, err
+			return "", nil, false, err
 		}
 	} else {
 		pointTypeLiteral = literal
@@ -226,7 +242,7 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 
 	pointIDExpr, err := newAliasedExprFromString(fmt.Sprintf("cast(%s as string)", String(pointID.Expr, false)), "id")
 	if err != nil {
-		return "", false, err
+		return "", nil, false, err
 	}
 	selectExprs := SelectExprs{pointType, pointIDExpr}
 
@@ -237,18 +253,146 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 	sel.SelectExprs = selectExprs
 
 	if pointTypeLiteral == "" {
-		return "", false, fmt.Errorf("point sql missing literal point_type column")
+		return "", nil, false, fmt.Errorf("point sql missing literal point_type column")
 	}
 	if err := applyTypeAnnotations(sel.SelectExprs, typeMap[pointTypeLiteral]); err != nil {
-		return "", false, err
+		return "", nil, false, err
 	}
 
-	applyDeduplication(sel, Exprs{
-		pointID.Expr,
-		pointType.Expr,
-	})
+	return pointTypeLiteral, []string{"id", "label"}, true, nil
+}
 
-	return pointTypeLiteral, true, nil
+func finalizeRewriteGroup(results []*rewriteResult) ([]Statement, error) {
+	if len(results) == 0 {
+		return nil, nil
+	}
+
+	dedupCols := results[0].dedupColumns
+	for _, res := range results {
+		if !stringSlicesEqual(res.dedupColumns, dedupCols) {
+			return nil, fmt.Errorf("inconsistent dedup columns within rewrite group")
+		}
+	}
+
+	if len(results) == 1 {
+		res := results[0]
+		applyDedupColumns(res.selectStmt, dedupCols)
+		return []Statement{res.statement}, nil
+	}
+
+	if unionStmt, projection, ok := buildUnionForResults(results); ok {
+		outerSelect := &Select{
+			SelectExprs: projection,
+			From: TableExprs{
+				&AliasedTableExpr{
+					Expr: &Subquery{Select: unionStmt},
+					As:   NewTableIdent("vt_union"),
+				},
+			},
+		}
+		applyDedupColumns(outerSelect, dedupCols)
+		return []Statement{outerSelect}, nil
+	}
+
+	statements := make([]Statement, 0, len(results))
+	for _, res := range results {
+		applyDedupColumns(res.selectStmt, dedupCols)
+		statements = append(statements, res.statement)
+	}
+	return statements, nil
+}
+
+func applyDedupColumns(sel *Select, columns []string) {
+	if sel == nil || len(columns) == 0 {
+		return
+	}
+	applyDeduplication(sel, columnNamesToExprs(columns))
+}
+
+func buildUnionForResults(results []*rewriteResult) (SelectStatement, SelectExprs, bool) {
+	if len(results) == 0 {
+		return nil, nil, false
+	}
+
+	var union SelectStatement
+	for i, res := range results {
+		stmt, ok := res.statement.(SelectStatement)
+		if !ok || res.selectStmt == nil {
+			return nil, nil, false
+		}
+		if i == 0 {
+			union = stmt
+			continue
+		}
+		union = &Union{
+			Type:  UnionAllStr,
+			Left:  union,
+			Right: stmt,
+		}
+	}
+
+	projection, err := buildUnionProjection(results[0].selectStmt)
+	if err != nil {
+		return nil, nil, false
+	}
+
+	return union, projection, true
+}
+
+func buildUnionProjection(sel *Select) (SelectExprs, error) {
+	if sel == nil {
+		return nil, fmt.Errorf("select is nil")
+	}
+
+	projection := make(SelectExprs, 0, len(sel.SelectExprs))
+	for _, expr := range sel.SelectExprs {
+		aliased, ok := expr.(*AliasedExpr)
+		if !ok {
+			return nil, fmt.Errorf("unsupported select expression %T for union projection", expr)
+		}
+		name := aliasOrColumnName(aliased)
+		if name == "" {
+			return nil, fmt.Errorf("missing column name for union projection")
+		}
+		column := &AliasedExpr{
+			Expr: &ColName{
+				Name: NewColIdent(name),
+			},
+		}
+		if !aliased.As.IsEmpty() && aliased.As.String() != name {
+			column.As = aliased.As
+		}
+		projection = append(projection, column)
+	}
+	return projection, nil
+}
+
+func columnNamesToExprs(columns []string) Exprs {
+	if len(columns) == 0 {
+		return nil
+	}
+	exprs := make(Exprs, 0, len(columns))
+	for _, name := range columns {
+		if name == "" {
+			continue
+		}
+		exprs = append(exprs, &ColName{
+			Name: NewColIdent(name),
+		})
+	}
+	return exprs
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func applyTypeAnnotations(selectExprs SelectExprs, typeMap map[string]string) error {
