@@ -2,6 +2,7 @@ package sqlparser
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -102,6 +103,89 @@ AND     link_type IN (
 
 	buffer, _ := json.MarshalIndent(rewritten, "", "  ")
 	t.Log("\n" + string(buffer))
+}
+
+func TestRewriteEdgeSqlUnion(t *testing.T) {
+	sql := `SELECT  CAST(entity_a AS STRING) AS point1_id,
+    CAST(entity_b AS STRING) AS point2_id,
+    'shop' AS point1_type,
+    'shop' AS point2_type,
+    UNIX_TIMESTAMP() * 1000000 AS ts_us,
+    'shop_shop_relation' AS edge_type,
+    link_info['idCard'] AS idCard,
+    link_info['bizNum'] AS bizNum,
+    link_info['bank'] AS bank,
+    link_info['pledgeId'] AS pledgeId,
+    link_info['mobile'] AS mobile,
+    link_info['chargeMobile'] AS chargeMobile,
+    link_info['aftersaleMobile'] AS aftersaleMobile,
+    link_info['loginDid'] AS loginDid,
+    link_info['loginIp'] AS loginIp,
+    link_info['sendAddr'] AS sendAddr,
+    link_info['strong'] AS strong,
+    link_info['highprec'] AS highprec,
+    link_info['fusionLink'] AS fusionLink,
+    link_info['productBindAuthor'] AS productBindAuthor,
+    link_info['orderAuthor'] AS orderAuthor,
+    link_info['createProductSim'] AS createProductSim,
+    link_info['orderProductSim'] AS orderProductSim
+FROM  dm_temai.ecom_entity_homolink_bg
+WHERE   date = max_pt('dm_temai.ecom_entity_homolink_bg')
+AND   link_type = 'shop_shop'
+AND   entity_a IS NOT NULL
+AND   entity_b IS NOT NULL;
+
+SELECT  CAST(entity_b AS STRING) AS point1_id,
+    CAST(entity_a AS STRING) AS point2_id,
+    'shop' AS point1_type,
+    'shop' AS point2_type,
+    UNIX_TIMESTAMP() * 1000000 AS ts_us,
+    'shop_shop_relation' AS edge_type,
+    link_info['idCard'] AS idCard,
+    link_info['bizNum'] AS bizNum,
+    link_info['bank'] AS bank,
+    link_info['pledgeId'] AS pledgeId,
+    link_info['mobile'] AS mobile,
+    link_info['chargeMobile'] AS chargeMobile,
+    link_info['aftersaleMobile'] AS aftersaleMobile,
+    link_info['loginDid'] AS loginDid,
+    link_info['loginIp'] AS loginIp,
+    link_info['sendAddr'] AS sendAddr,
+    link_info['strong'] AS strong,
+    link_info['highprec'] AS highprec,
+    link_info['fusionLink'] AS fusionLink,
+    link_info['productBindAuthor'] AS productBindAuthor,
+    link_info['orderAuthor'] AS orderAuthor,
+    link_info['createProductSim'] AS createProductSim,
+    link_info['orderProductSim'] AS orderProductSim
+FROM  dm_temai.ecom_entity_homolink_bg
+WHERE   date = max_pt('dm_temai.ecom_entity_homolink_bg')
+AND   link_type = 'shop_shop'
+AND   entity_a IS NOT NULL
+AND   entity_b IS NOT NULL;`
+
+	rewritten, err := RewriteSqls(sql, false, nil)
+	if err != nil {
+		t.Fatalf("RewriteSqls error: %v", err)
+	}
+
+	if len(rewritten) != 1 {
+		t.Fatalf("expected 1 rewritten sql, got %d", len(rewritten))
+	}
+
+	def, ok := rewritten["shop_shop_relation"]
+	if !ok {
+		t.Fatalf("expected key shop_shop_relation in rewritten map")
+	}
+
+	lower := strings.ToLower(def.Sql)
+	if !strings.Contains(lower, "union all") {
+		t.Fatalf("expected union all in rewritten sql, got %s", def.Sql)
+	}
+
+	if strings.Count(lower, "row_number()") != 1 {
+		t.Fatalf("expected single deduplication step, got %s", def.Sql)
+	}
 }
 
 func TestRewritePointSql(t *testing.T) {
