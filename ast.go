@@ -2788,10 +2788,11 @@ func (node *WindowSpecification) Format(buf *TrackedBuffer) {
 		buf.Myprintf("partition by %v", node.PartitionBy)
 	}
 	if len(node.OrderBy) > 0 {
-		if len(node.PartitionBy) > 0 {
-			buf.Myprintf(" ")
+		prefix := " order by "
+		for _, n := range node.OrderBy {
+			buf.Myprintf("%s%v", prefix, n)
+			prefix = ", "
 		}
-		buf.Myprintf("%v", node.OrderBy)
 	}
 }
 
