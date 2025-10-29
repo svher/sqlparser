@@ -142,7 +142,7 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 			continue
 		}
 
-		switch aliasOrColumnName(aliased) {
+		switch strings.ToLower(aliasOrColumnName(aliased)) {
 		case "point1_id":
 			point1ID = aliased
 		case "point2_id":
@@ -197,7 +197,7 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 			continue
 		}
 
-		switch aliasOrColumnName(aliased) {
+		switch strings.ToLower(aliasOrColumnName(aliased)) {
 		case "edge_type":
 			edgeType = aliased
 			aliased.As = NewColIdent("label")
@@ -244,7 +244,7 @@ func rewritePointSql(sel *Select, typeMap map[string]map[string]string) (string,
 			continue
 		}
 
-		switch aliasOrColumnName(aliased) {
+		switch strings.ToLower(aliasOrColumnName(aliased)) {
 		case "point_id":
 			pointID = aliased
 		case "point_type":
@@ -421,7 +421,7 @@ func applyTypeAnnotations(selectExprs SelectExprs, typeMap map[string]string) er
 		}
 
 		name := aliasOrColumnName(aliased)
-		targetType, ok := typeMap[name]
+		targetType, ok := typeMap[strings.ToLower(name)]
 		if !ok {
 			continue
 		}
@@ -513,7 +513,7 @@ func findStringLiteralForAliasInSelect(sel *Select, alias string) (string, bool)
 		if !ok {
 			continue
 		}
-		if aliasOrColumnName(aliased) != alias {
+		if !strings.EqualFold(aliasOrColumnName(aliased), alias) {
 			continue
 		}
 		if literal, err := extractStringLiteral(aliased.Expr); err == nil {
@@ -703,7 +703,7 @@ func aliasOrColumnName(ae *AliasedExpr) string {
 		return ""
 	}
 	if !ae.As.IsEmpty() {
-		return ae.As.Lowered()
+		return ae.As.String()
 	}
 	return deriveAliasFromExpr(ae.Expr)
 }
@@ -730,7 +730,7 @@ func isStringCastExpr(expr Expr) bool {
 func deriveAliasFromExpr(expr Expr) string {
 	switch e := expr.(type) {
 	case *ColName:
-		return e.Name.Lowered()
+		return e.Name.String()
 	case *ConvertExpr:
 		return deriveAliasFromExpr(e.Expr)
 	case *ParenExpr:
