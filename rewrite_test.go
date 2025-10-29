@@ -190,6 +190,67 @@ AND   entity_b IS NOT NULL;`
 	t.Log(def.Sql)
 }
 
+func TestRewriteEdgeSqlUnionStatement(t *testing.T) {
+	sql := `SELECT  DISTINCT point1_id,
+                    point2_id,
+                    'store' AS point1_type,
+                    'store' AS point2_type,
+                    UNIX_TIMESTAMP() * 1000000 AS ts_us,
+                    'store_store_relation' AS edge_type,
+                    link_info['ecom_store_bind_business_address'] AS ecom_store_bind_business_address,
+                    link_info['ecom_store_bind_poi_id'] AS ecom_store_bind_poi_id,
+                    link_info['ecom_store_bind_licenseid'] AS ecom_store_bind_licenseid,
+                    link_info['ecom_store_bind_show_mobile'] AS ecom_store_bind_show_mobile,
+                    link_info['ecom_store_bind_license_address'] AS ecom_store_bind_license_address,
+                    link_info['ecom_store_bind_legal_id_card'] AS ecom_store_bind_legal_id_card,
+                    link_info['ecom_store_bind_legal_person_address'] AS ecom_store_bind_legal_person_address
+            FROM    sentry_graph_platform.ecom_instant_store_relation
+            WHERE   date = max_pt('sentry_graph_platform.ecom_instant_store_relation')
+            AND     point1_id IS NOT NULL
+            AND     point2_id IS NOT NULL
+            UNION ALL
+            SELECT  DISTINCT point2_id AS point1_id,
+                    point1_id AS point2_id,
+                    'store' AS point1_type,
+                    'store' AS point2_type,
+                    UNIX_TIMESTAMP() * 1000000 AS ts_us,
+                    'store_store_relation' AS edge_type,
+                    link_info['ecom_store_bind_business_address'] AS ecom_store_bind_business_address,
+                    link_info['ecom_store_bind_poi_id'] AS ecom_store_bind_poi_id,
+                    link_info['ecom_store_bind_licenseid'] AS ecom_store_bind_licenseid,
+                    link_info['ecom_store_bind_show_mobile'] AS ecom_store_bind_show_mobile,
+                    link_info['ecom_store_bind_license_address'] AS ecom_store_bind_license_address,
+                    link_info['ecom_store_bind_legal_id_card'] AS ecom_store_bind_legal_id_card,
+                    link_info['ecom_store_bind_legal_person_address'] AS ecom_store_bind_legal_person_address
+            FROM    sentry_graph_platform.ecom_instant_store_relation
+            WHERE   date = max_pt('sentry_graph_platform.ecom_instant_store_relation')
+            AND     point1_id IS NOT NULL
+            AND     point2_id IS NOT NULL;`
+
+	rewritten, err := RewriteSqls(sql, true, nil)
+	if err != nil {
+		t.Fatalf("RewriteSqls error: %v", err)
+	}
+
+	if len(rewritten) != 1 {
+		t.Fatalf("expected 1 rewritten sql, got %d", len(rewritten))
+	}
+
+	def, ok := rewritten["store_store_relation"]
+	if !ok {
+		t.Fatalf("expected key store_store_relation in rewritten map")
+	}
+
+	lower := strings.ToLower(def.Sql)
+	if !strings.Contains(lower, "union all") {
+		t.Fatalf("expected union all in rewritten sql, got %s", def.Sql)
+	}
+
+	if strings.Count(lower, "row_number()") != 1 {
+		t.Fatalf("expected single deduplication step, got %s", def.Sql)
+	}
+}
+
 func TestRewritePointSql(t *testing.T) {
 	rewritten, err := RewriteSqls(`SELECT
 concat(leaf_cid_new, '-', price_range_in) AS point_id,

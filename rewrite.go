@@ -38,21 +38,17 @@ func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) 
 		if stmt == nil {
 			continue
 		}
-		unwrapped := stmt
-		if withStmt, ok := stmt.(*With); ok {
-			unwrapped = withStmt.Stmt
-		}
-		selectStmt, ok := unwrapped.(*Select)
+		selectStmt, ok := stmt.(SelectStatement)
 		if !ok {
 			return nil, fmt.Errorf("unexpected statement type %T", stmt)
 		}
-		key, dedupCols, err := rewriteSql(stmt, selectStmt, typeMap)
+		key, dedupCols, baseSelect, err := rewriteSelectStatement(selectStmt, typeMap)
 		if err != nil {
 			return nil, err
 		}
 		appendResult(key, &rewriteResult{
-			statement:    stmt,
-			selectStmt:   selectStmt,
+			statement:    selectStmt,
+			selectStmt:   baseSelect,
 			dedupColumns: dedupCols,
 		})
 	}
@@ -72,7 +68,7 @@ func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) 
 	return rewritten, nil
 }
 
-func rewriteSql(stmt Statement, sel *Select, typeMap map[string]map[string]string) (string, []string, error) {
+func rewriteSql(sel *Select, typeMap map[string]map[string]string) (string, []string, error) {
 	if key, dedupCols, rewritten, err := rewriteEdgeSql(sel, typeMap); err != nil {
 		return "", nil, err
 	} else if rewritten {
@@ -85,6 +81,46 @@ func rewriteSql(stmt Statement, sel *Select, typeMap map[string]map[string]strin
 	}
 
 	return "", nil, fmt.Errorf("select does not contain recognizable point or edge columns")
+}
+
+func rewriteSelectStatement(stmt SelectStatement, typeMap map[string]map[string]string) (string, []string, *Select, error) {
+	switch node := stmt.(type) {
+	case *Select:
+		key, dedupCols, err := rewriteSql(node, typeMap)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		return key, dedupCols, node, nil
+	case *ParenSelect:
+		return rewriteSelectStatement(node.Select, typeMap)
+	case *Union:
+		leftKey, leftDedup, leftSelect, err := rewriteSelectStatement(node.Left, typeMap)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		rightKey, rightDedup, _, err := rewriteSelectStatement(node.Right, typeMap)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		if leftKey == "" || rightKey == "" {
+			return "", nil, nil, fmt.Errorf("missing rewrite key for union branch")
+		}
+		if leftKey != rightKey {
+			return "", nil, nil, fmt.Errorf("mismatched rewrite keys for union branches: %s vs %s", leftKey, rightKey)
+		}
+		if !stringSlicesEqual(leftDedup, rightDedup) {
+			return "", nil, nil, fmt.Errorf("inconsistent dedup columns within union branches")
+		}
+		return leftKey, leftDedup, leftSelect, nil
+	case *With:
+		key, dedupCols, baseSelect, err := rewriteSelectStatement(node.Stmt, typeMap)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		return key, dedupCols, baseSelect, nil
+	default:
+		return "", nil, nil, fmt.Errorf("unexpected statement type %T", stmt)
+	}
 }
 
 func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, []string, bool, error) {
