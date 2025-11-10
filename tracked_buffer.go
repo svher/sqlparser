@@ -62,18 +62,29 @@ func (buf *TrackedBuffer) WriteNode(node SQLNode) *TrackedBuffer {
 func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 	end := len(format)
 	fieldnum := 0
-	for i := 0; i < end; {
-		lasti := i
+	i := 0
+	
+	for i < end {
+		// Find the next '%' or write remaining string
+		start := i
 		for i < end && format[i] != '%' {
 			i++
 		}
-		if i > lasti {
-			buf.WriteString(format[lasti:i])
+		
+		// Write literal string portion if any
+		if i > start {
+			buf.WriteString(format[start:i])
 		}
+		
+		// Check if we're at end
 		if i >= end {
 			break
 		}
-		i++ // '%'
+		
+		// Skip '%'
+		i++
+		
+		// Process format specifier
 		switch format[i] {
 		case 'c':
 			switch v := values[fieldnum].(type) {
@@ -95,13 +106,12 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 			}
 		case 'v':
 			node := values[fieldnum].(SQLNode)
-			if node == nil {
-				break
-			}
-			if buf.nodeFormatter == nil {
-				node.Format(buf)
-			} else {
-				buf.nodeFormatter(buf, node)
+			if node != nil {
+				if buf.nodeFormatter == nil {
+					node.Format(buf)
+				} else {
+					buf.nodeFormatter(buf, node)
+				}
 			}
 		case 'a':
 			buf.WriteArg(values[fieldnum].(string))

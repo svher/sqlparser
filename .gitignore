@@ -1,3 +1,5 @@
 y.output
 .idea/
 sql.output
+*.test
+*.prof
