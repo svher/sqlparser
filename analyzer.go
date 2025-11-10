@@ -53,6 +53,11 @@ const (
 func Preview(sql string) int {
 	trimmed := StripLeadingComments(sql)
 
+	// Fast path for common comment-only statements
+	if len(trimmed) >= 3 && trimmed[0] == '/' && trimmed[1] == '*' && trimmed[2] == '!' {
+		return StmtComment
+	}
+
 	firstWord := trimmed
 	if end := strings.IndexFunc(trimmed, unicode.IsSpace); end != -1 {
 		firstWord = trimmed[:end]
@@ -73,22 +78,6 @@ func Preview(sql string) int {
 		return StmtUpdate
 	case "delete":
 		return StmtDelete
-	}
-	// For the following statements it is not sufficient to rely
-	// on loweredFirstWord. This is because they are not statements
-	// in the grammar and we are relying on Preview to parse them.
-	// For instance, we don't want: "BEGIN JUNK" to be parsed
-	// as StmtBegin.
-	trimmedNoComments, _ := SplitMarginComments(trimmed)
-	switch strings.ToLower(trimmedNoComments) {
-	case "begin", "start transaction":
-		return StmtBegin
-	case "commit":
-		return StmtCommit
-	case "rollback":
-		return StmtRollback
-	}
-	switch loweredFirstWord {
 	case "create", "alter", "rename", "drop", "truncate":
 		return StmtDDL
 	case "set":
@@ -100,9 +89,23 @@ func Preview(sql string) int {
 	case "analyze", "describe", "desc", "explain", "repair", "optimize":
 		return StmtOther
 	}
-	if strings.Index(trimmed, "/*!") == 0 {
-		return StmtComment
+	
+	// For the following statements it is not sufficient to rely
+	// on loweredFirstWord. This is because they are not statements
+	// in the grammar and we are relying on Preview to parse them.
+	// For instance, we don't want: "BEGIN JUNK" to be parsed
+	// as StmtBegin.
+	trimmedNoComments, _ := SplitMarginComments(trimmed)
+	loweredNoComments := strings.ToLower(trimmedNoComments)
+	switch loweredNoComments {
+	case "begin", "start transaction":
+		return StmtBegin
+	case "commit":
+		return StmtCommit
+	case "rollback":
+		return StmtRollback
 	}
+	
 	return StmtUnknown
 }
 
