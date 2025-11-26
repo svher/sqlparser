@@ -207,6 +207,9 @@ func rewriteEdgeSql(sel *Select, typeMap map[string]map[string]string) (string, 
 				}
 			}
 			selectExprs = append(selectExprs, aliased)
+		case "ts_us":
+			aliased.As = NewColIdent("tsUs")
+			selectExprs = append(selectExprs, aliased)
 		default:
 			selectExprs = append(selectExprs, aliased)
 		}
