@@ -630,16 +630,41 @@ func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (i
 		buffer.WriteByte(byte(tkn.lastChar))
 		tkn.next()
 	}
-	lowered := bytes.ToLower(buffer.Bytes())
-	loweredStr := string(lowered)
-	if keywordID, found := keywords[loweredStr]; found {
-		return keywordID, lowered
+	// Get the identifier bytes
+	identBytes := buffer.Bytes()
+	
+	// Fast path: check if we need to lowercase
+	needsLowering := false
+	for _, b := range identBytes {
+		if b >= 'A' && b <= 'Z' {
+			needsLowering = true
+			break
+		}
 	}
-	// dual must always be case-insensitive
-	if loweredStr == "dual" {
-		return ID, lowered
+	
+	if needsLowering {
+		lowered := bytes.ToLower(identBytes)
+		loweredStr := string(lowered)
+		if keywordID, found := keywords[loweredStr]; found {
+			return keywordID, lowered
+		}
+		// dual must always be case-insensitive
+		if loweredStr == "dual" {
+			return ID, lowered
+		}
+	} else {
+		// No uppercase letters, try keyword lookup directly
+		identStr := string(identBytes)
+		if keywordID, found := keywords[identStr]; found {
+			return keywordID, identBytes
+		}
+		// dual must always be case-insensitive
+		if identStr == "dual" {
+			return ID, identBytes
+		}
 	}
-	return ID, buffer.Bytes()
+	
+	return ID, identBytes
 }
 
 func (tkn *Tokenizer) scanHex() (int, []byte) {

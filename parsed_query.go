@@ -49,7 +49,9 @@ func (pq *ParsedQuery) GenerateQuery(bindVariables map[string]*querypb.BindVaria
 	if len(pq.bindLocations) == 0 {
 		return []byte(pq.Query), nil
 	}
-	buf := bytes.NewBuffer(make([]byte, 0, len(pq.Query)))
+	// Pre-allocate buffer with extra space for bind variable expansions
+	estimatedSize := len(pq.Query) + len(pq.bindLocations)*10
+	buf := bytes.NewBuffer(make([]byte, 0, estimatedSize))
 	current := 0
 	for _, loc := range pq.bindLocations {
 		buf.WriteString(pq.Query[current:loc.offset])
