@@ -38,6 +38,10 @@ func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) 
 		if stmt == nil {
 			continue
 		}
+
+		if err := replaceMaxPtWithDate(stmt); err != nil {
+			return nil, err
+		}
 		selectStmt, ok := stmt.(SelectStatement)
 		if !ok {
 			return nil, fmt.Errorf("unexpected statement type %T", stmt)
@@ -81,6 +85,55 @@ func rewriteSql(sel *Select, typeMap map[string]map[string]string) (string, []st
 	}
 
 	return "", nil, fmt.Errorf("select does not contain recognizable point or edge columns")
+}
+
+func replaceMaxPtWithDate(stmt Statement) error {
+	return Walk(func(node SQLNode) (bool, error) {
+		comp, ok := node.(*ComparisonExpr)
+		if !ok {
+			return true, nil
+		}
+
+		replaceMaxPtComparison(comp)
+		return true, nil
+	}, stmt)
+}
+
+func replaceMaxPtComparison(comp *ComparisonExpr) {
+	if comp == nil {
+		return
+	}
+
+	if comp.Operator != EqualStr {
+		return
+	}
+
+	if isDateColumn(comp.Left) && isMaxPtFunc(comp.Right) {
+		comp.Right = NewStrVal([]byte("${date}"))
+		return
+	}
+
+	if isMaxPtFunc(comp.Left) && isDateColumn(comp.Right) {
+		comp.Left = NewStrVal([]byte("${date}"))
+	}
+}
+
+func isDateColumn(expr Expr) bool {
+	col, ok := expr.(*ColName)
+	if !ok {
+		return false
+	}
+
+	return col.Name.EqualString("date")
+}
+
+func isMaxPtFunc(expr Expr) bool {
+	fn, ok := expr.(*FuncExpr)
+	if !ok {
+		return false
+	}
+
+	return fn.Name.EqualString("max_pt")
 }
 
 func rewriteSelectStatement(stmt SelectStatement, typeMap map[string]map[string]string) (string, []string, *Select, error) {
