@@ -1276,3 +1276,101 @@ WHERE   a.mediumType IN (
 	buffer, _ := json.MarshalIndent(rewritten, "", "  ")
 	t.Log("\n" + string(buffer))
 }
+
+func TestRewriteSqlsReplacesMaxPtDate(t *testing.T) {
+	sql := `WITH full_product AS (
+    SELECT  prod_id,
+            prod_status,
+            saleable_status
+    FROM    ecom.dim_prd_product_base_df
+    WHERE   date = max_pt('ecom.dim_prd_product_base_df')
+    AND     shop_id != 0
+    AND     shop_id IS NOT NULL
+    AND     prod_id != 0
+    AND     prod_id IS NOT NULL
+    AND     shop_name NOT RLIKE '测试|压测｜演练勿动'
+    AND     prod_name NOT RLIKE '测试|压测｜演练勿动｜即时零售-1sku'
+),
+valid_product AS (
+    (
+        SELECT  prod_id
+        FROM    full_product
+        WHERE   prod_status = 0
+        AND     saleable_status != 0
+    )
+    UNION ALL
+    (
+        SELECT  t1.prod_id
+        FROM    full_product t1
+        JOIN    (
+                    SELECT  substr(object_id, 3, length(object_id)) AS object_id
+                    FROM    ecom_governance.sentry_list_detail_dict
+                    WHERE   date = max_pt('ecom_governance.sentry_list_detail_dict')
+                    AND     list_id IN (
+                                7366542361268060457,
+                                7402841747811729714,
+                                7392120429529268480,
+                                7402606448795975986,
+                                7462669257222914367,
+                                7496443864329224488,
+                                7526775728474587442,
+                                7540196225421672745,
+                                7539857770321805631,
+                                7550647784375288106
+                            )
+                ) t2
+        ON      CAST(t1.prod_id AS STRING) = t2.object_id
+    )
+    UNION ALL
+    (
+        SELECT  t1.prod_id
+        FROM    full_product t1
+        JOIN    (
+                    SELECT  prod_id
+                    FROM    ecom.app_govern_sentry_prod_low_quality_factor_di
+                    WHERE   date = max_pt('ecom.app_govern_sentry_prod_low_quality_factor_di')
+                ) t2
+        ON      t1.prod_id = t2.prod_id
+    )
+),
+product_sim AS (
+    SELECT  product_id,
+            sim_id[0] AS sim_id,
+            uri[0] AS uri
+    FROM    data_ecom.ecom_product_same_img_simid
+    WHERE   date = max_pt('data_ecom.ecom_product_same_img_simid')
+    AND     product_id IS NOT NULL
+    AND     product_id != ''
+    AND     sim_id[0] IS NOT NULL
+    AND     sim_id[0] != ''
+)
+SELECT  t1.product_id AS point1_id,
+        t1.sim_id AS point2_id,
+        'product' AS point1_type,
+        'sim' AS point2_type,
+        '' AS value,
+        (UNIX_TIMESTAMP() * 1000000) AS ts_us,
+        'product_sim' AS edge_type,
+        t1.uri
+FROM    product_sim t1
+JOIN    valid_product t2
+ON      t1.product_id = CAST(t2.prod_id AS STRING)`
+
+	rewritten, err := RewriteSqls(sql, false, nil)
+	if err != nil {
+		t.Fatalf("RewriteSqls error: %v", err)
+	}
+
+	def, ok := rewritten["product_sim"]
+	if !ok {
+		t.Fatalf("expected rewritten sql for product_sim edge type")
+	}
+
+	if strings.Contains(def.Sql, "max_pt(") {
+		t.Fatalf("expected max_pt to be replaced, got: %s", def.Sql)
+	}
+
+	if got := strings.Count(def.Sql, "\"${date}\""); got != 4 {
+		t.Fatalf("expected 4 date placeholders, got %d in %s", got, def.Sql)
+	}
+}
