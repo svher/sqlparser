@@ -18,8 +18,9 @@ type rewriteResult struct {
 }
 
 type RewriteOptions struct {
-	Pretty  bool
-	TypeMap map[string]map[string]string
+	Pretty       bool
+	TypeMap      map[string]map[string]string
+	ReplaceMaxPt bool
 }
 
 type RewriteOption func(*RewriteOptions)
@@ -33,6 +34,12 @@ func WithPretty(pretty bool) RewriteOption {
 func WithTypeMap(typeMap map[string]map[string]string) RewriteOption {
 	return func(o *RewriteOptions) {
 		o.TypeMap = typeMap
+	}
+}
+
+func WithReplaceMaxPt(replace bool) RewriteOption {
+	return func(o *RewriteOptions) {
+		o.ReplaceMaxPt = replace
 	}
 }
 
@@ -63,8 +70,10 @@ func RewriteSqls(sql string, opts ...RewriteOption) (map[string]*SqlDef, error) 
 			continue
 		}
 
-		if err := replaceMaxPtWithDate(stmt); err != nil {
-			return nil, err
+		if options.ReplaceMaxPt {
+			if err := replaceMaxPtWithDate(stmt); err != nil {
+				return nil, err
+			}
 		}
 		selectStmt, ok := stmt.(SelectStatement)
 		if !ok {
