@@ -17,7 +17,31 @@ type rewriteResult struct {
 	dedupColumns []string
 }
 
-func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) (map[string]*SqlDef, error) {
+type RewriteOptions struct {
+	Pretty  bool
+	TypeMap map[string]map[string]string
+}
+
+type RewriteOption func(*RewriteOptions)
+
+func WithPretty(pretty bool) RewriteOption {
+	return func(o *RewriteOptions) {
+		o.Pretty = pretty
+	}
+}
+
+func WithTypeMap(typeMap map[string]map[string]string) RewriteOption {
+	return func(o *RewriteOptions) {
+		o.TypeMap = typeMap
+	}
+}
+
+func RewriteSqls(sql string, opts ...RewriteOption) (map[string]*SqlDef, error) {
+	options := &RewriteOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	if len(strings.TrimSpace(sql)) == 0 {
 		return nil, nil
 	}
@@ -46,7 +70,7 @@ func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) 
 		if !ok {
 			return nil, fmt.Errorf("unexpected statement type %T", stmt)
 		}
-		key, dedupCols, baseSelect, err := rewriteSelectStatement(selectStmt, typeMap)
+		key, dedupCols, baseSelect, err := rewriteSelectStatement(selectStmt, options.TypeMap)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +88,7 @@ func RewriteSqls(sql string, pretty bool, typeMap map[string]map[string]string) 
 		}
 
 		rewritten[key] = &SqlDef{
-			Sql:       strings.Replace(String(stmt, pretty)+";", "'", "\"", -1),
+			Sql:       strings.Replace(String(stmt, options.Pretty)+";", "'", "\"", -1),
 			LabelType: "string",
 		}
 	}

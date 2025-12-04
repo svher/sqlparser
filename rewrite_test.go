@@ -90,7 +90,7 @@ AND     link_type IN (
         'shop_90dLoginIp',
         'shop_90dLoginDid',
         'shop_90dCreateProductSimNew'
-);`, false, typeMap)
+);`, WithTypeMap(typeMap))
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
@@ -164,7 +164,7 @@ AND   link_type = 'shop_shop'
 AND   entity_a IS NOT NULL
 AND   entity_b IS NOT NULL;`
 
-	rewritten, err := RewriteSqls(sql, true, nil)
+	rewritten, err := RewriteSqls(sql, WithPretty(true))
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestRewriteEdgeSqlUnionStatement(t *testing.T) {
             AND     point1_id IS NOT NULL
             AND     point2_id IS NOT NULL;`
 
-	rewritten, err := RewriteSqls(sql, true, nil)
+	rewritten, err := RewriteSqls(sql, WithPretty(true))
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
@@ -308,11 +308,11 @@ concat(leaf_cid_new, '-', price_range_in) AS point_id,
   low_level_author_ratio
 FROM
   dm_temai.shop_price_range_ccr_negative_new_30d
-WHERE date = max_pt('dm_temai.shop_price_range_ccr_negative_new_30d')`, false, map[string]map[string]string{
+WHERE date = max_pt('dm_temai.shop_price_range_ccr_negative_new_30d')`, WithTypeMap(map[string]map[string]string{
 		"group": {
 			"quality_ccr_cnt_60d": "float",
 		},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
@@ -1265,7 +1265,7 @@ WHERE   a.mediumType IN (
       '30d_order_author',
       '30d_login_did',
       '30d_login_ip'
-    );`, false, nil)
+    );`)
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
@@ -1356,7 +1356,7 @@ FROM    product_sim t1
 JOIN    valid_product t2
 ON      t1.product_id = CAST(t2.prod_id AS STRING)`
 
-	rewritten, err := RewriteSqls(sql, false, nil)
+	rewritten, err := RewriteSqls(sql)
 	if err != nil {
 		t.Fatalf("RewriteSqls error: %v", err)
 	}
