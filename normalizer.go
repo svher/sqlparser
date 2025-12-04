@@ -101,15 +101,20 @@ func (nz *normalizer) convertSQLValDedup(node *SQLVal) {
 	}
 
 	// Check if there's a bindvar for that value already.
+	// Build key only once to avoid repeated string conversions
+	var keyBuf [257]byte // 256 + 1 for prefix
 	var key string
 	if bval.Type == sqltypes.VarBinary {
 		// Prefixing strings with "'" ensures that a string
 		// and number that have the same representation don't
 		// collide.
-		key = "'" + string(node.Val)
+		keyBuf[0] = '\''
+		n := copy(keyBuf[1:], node.Val)
+		key = string(keyBuf[:n+1])
 	} else {
 		key = string(node.Val)
 	}
+	
 	bvname, ok := nz.vals[key]
 	if !ok {
 		// If there's no such bindvar, make a new one.
